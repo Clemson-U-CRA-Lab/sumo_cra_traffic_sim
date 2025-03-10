@@ -28,16 +28,22 @@ class sumo_sim():
             return [0.0, 0.0, 0.0, 0.0]
     
     def assignAcceleration(self, vehicle_ID, tgt_acc, dt):
-        if not (vehicle_ID in self.vehID_list):
-            print(vehicle_ID + " doesn't exist in the traffic")
-        else:
+        if vehicle_ID in self.vehID_list:
             traci.vehicle.setAcceleration(vehID=vehicle_ID, acceleration=tgt_acc, duration=dt)
+        else:
+            print(vehicle_ID + " doesn't exist in the traffic")
+            
+    def assignTargetSpeed(self, vehicle_ID, tgt_spd):
+        if vehicle_ID in self.vehID_list:
+            traci.vehicle.setSpeed(vehID=vehicle_ID, speed=tgt_spd)
+        else:
+            print(vehicle_ID + " doesn't exist in the traffic")
     
     def simulationStepForward(self):
         traci.simulationStep()
         self.vehID_list = traci.vehicle.getIDList()
         self.step += 1
-        
+
 if __name__=="__main__":
     step = 0
 
