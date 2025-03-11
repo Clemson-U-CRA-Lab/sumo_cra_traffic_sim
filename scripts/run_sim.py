@@ -77,7 +77,7 @@ if __name__=="__main__":
     record_t = np.array(leading_vehicle_speed_profile[:, 0])
     front_v_t = np.array(leading_vehicle_speed_profile[:, 1])
     
-    while sumo_sim_manager.step < 800:
+    while sumo_sim_manager.step < 750:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
