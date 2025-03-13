@@ -6,6 +6,7 @@ import traci
 import traci.constants as tc
 import matplotlib.pyplot as plt
 from utils import *
+from _controller import *
 import time
 class sumo_sim():
     def __init__(self, sumo_config_name):
