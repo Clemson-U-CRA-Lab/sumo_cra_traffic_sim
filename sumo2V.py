@@ -1,4 +1,4 @@
-# This script will ru on the on-vehicle computer - sends gps info to RS-PC
+# This script will run on the RoadSide computer - sends sumo info to MachE
 
 import os
 import sys
@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import time
 import socket
 import struct
+import serial
 
 # TCP Socket Setup as client
 SERVER_IP = 'fe80::6e5:48ff:fe30:0820'  # Server IP address (modify as necessary)
@@ -35,8 +36,12 @@ def send_nv_info(client_socket, server_address, nv_spd, nv_pos):
 # Function to get vehicle info (position and speed) for MachE from TCP server
 def recv_machE_info(client_socket):
 
+    print("Retrieving MachE information from TCP with RSU...")
+
     # Receive data from the server (assuming position and speed are sent as floats)
-    data = client_socket.recv(1024)
+    data = client_socket.recv(16)
+    # print(data, len(data))
+    
     # Parse the data (assuming position and speed are sent as  floats)
     spd, pos_x, pos_y, pos_phi = struct.unpack(f'<{ARRAY_SIZE}f', data)  # 'ff' means two floats
     
@@ -68,28 +73,27 @@ def main():
             nv0_acc_t = traci.vehicle.getAcceleration(vehID=nv0)
             nv0_t = traci.simulation.getTime()
 
-            send_nv_info(client_socket, server_address, nv_spd=nv0_spd_t, nv_pos=[nv0_pos_t, nv0_dist_t, nv0_lane_t])
-
+            send_nv_info(client_socket, server_address, nv_spd=nv0_spd_t, nv_pos=[nv0_pos_t[0], nv0_pos_t[1], nv0_dist_t])
+            # print("Sent: ",nv0_spd_t,  [nv0_pos_t[0], nv0_pos_t[1], nv0_dist_t])
+            # send_nv_info(client_socket, server_address, nv_spd=.4, nv_pos=[.3, .2, .2])
         
-        # Retrieve veh_2's info from TCP server every step (you can modify this as needed)
-        if step == 500:
-            print("Retrieving veh_2 information from TCP socket...")
+        # Retrieve mache's info from TCP server every step
+        if step > 0:
             mache_spd, mache_pos = recv_machE_info(client_socket=client_socket)
 
             # Assuming veh_2 has a different ID and we want to set its position and speed in the simulation
             if "mache" in vehicle_list:
                 # Update the position and speed of veh_2 using the received information
-                traci.vehicle.moveToXY("mache", mache_pos[0], mache_pos[1], angle=0)
-                traci.vehicle.setSpeed("mache", mache_spd)
+                # traci.vehicle.moveToXY("mache", mache_pos[0], mache_pos[1], angle=0)
+                # traci.vehicle.setSpeed("mache", mache_spd)
                 print(f"Updated mache: Position {mache_pos}, Speed {mache_spd}")
         
         step += 1
-        time.sleep(0.1)
+        time.sleep(0.5)
 
     # Close the SUMO simulation
     traci.close(False)
 
         
-
 if __name__ == '__main__':
     main()

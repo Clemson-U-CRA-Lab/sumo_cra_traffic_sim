@@ -10,7 +10,7 @@
 
     <!-- Assign vehicles to routes -->
     <vehicle id="mache" type="car" route="route1" depart="0" departLane="best" departPos="0" color="1,0,0" departSpeed = "0" />
-    <vehicle id="nv0" type="car" route="route1" depart="0" departPos="20"/>
+    <vehicle id="nv0" type="car" route="route1" depart="0" departPos="30"/>
     <vehicle id="nv1" type="car" route="route1" depart="0" departPos="15"/>
     
     <!-- <vehicle id="veh4" type="car" route="route1" depart="3"/>
