@@ -102,7 +102,7 @@ def main():
             update_mache_in_sumo(veh=StalledNv, spd=0)
 
         # Retrieve mache's info from TCP server every step
-        if step >= 600:
+        if step >= 0:
             mache_spd, mache_pos = recv_machE_info(client_socket=client_socket)
 
             # Assuming veh_2 has a different ID and we want to set its position and speed in the simulation
@@ -113,7 +113,7 @@ def main():
                 print(f"Mache: Position {mache_pos}, Speed {mache_spd}")
         
         step += 1
-        time.sleep(0.1)
+        time.sleep(0.3)
 
     # Close the SUMO simulation
     traci.close(False)
