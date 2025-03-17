@@ -12,7 +12,7 @@ import struct
 import serial
 
 # TCP Socket Setup as client
-SERVER_IP = 'fe80::6e5:48ff:fe30:0820'  # Server IP address (modify as necessary)
+SERVER_IP = 'fe80::6e5:48ff:fe30:0820'  # RSU IP address (modify as necessary)
 SERVER_PORT = 7002  # Server port
 ARRAY_SIZE = 4 # Define the size of the array
 TIMEOUT = 5  # Timeout
@@ -21,7 +21,8 @@ server_address = (SERVER_IP, SERVER_PORT)
 # SUMO configuration
 sumoBinary  = "/usr/bin/sumo-gui"
 sumoCmd = [sumoBinary, "-c", "sumo/v2x/v2x.sumocfg"]
-nv = 'nv1' # the car that stalls
+StalledNv = 'nv1' # the car that stalls
+RealNv = "mache"
 
 def send_nv_info(client_socket, server_address, nv_spd, nv_pos):
 
@@ -70,11 +71,10 @@ def update_mache_in_sumo(veh="mache", spd=0, pos=None):
 def main():
 
     # Create an IPv6 TCP socket
-    client_socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-    client_socket.connect((SERVER_IP, SERVER_PORT, 0, 2))  # Scope ID (2) may need to be changed for your network interface
-    # client_socket.settimeout(TIMEOUT)
-
-    # client_socket = wait_for_server(ip=SERVER_IP,port=SERVER_PORT, timeout=TIMEOUT)
+    # client_socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    # client_socket.connect((SERVER_IP, SERVER_PORT, 0, 2))  # Scope ID (2) may need to be changed for your network interface
+    client_socket = wait_for_server(ip=SERVER_IP,port=SERVER_PORT, timeout=TIMEOUT)
+    print("Connected to rSU")
 
     # Start the SUMO simulation
     traci.start(sumoCmd)
@@ -87,21 +87,22 @@ def main():
         # print(vehicle_list)
         
         # Check if nv0 is in the vehicle list
-        if nv in vehicle_list:
-            nv_pos = traci.vehicle.getPosition(vehID=nv)
-            nv_spd = traci.vehicle.getSpeed(vehID=nv)
-            nv_dist = traci.vehicle.getDistance(vehID=nv)
+        if StalledNv in vehicle_list:
+            nv_pos = traci.vehicle.getPosition(vehID=StalledNv)
+            nv_spd = traci.vehicle.getSpeed(vehID=StalledNv)
+            nv_dist = traci.vehicle.getDistance(vehID=StalledNv)
             # nv0_lane_t = traci.vehicle.getLaneID(vehID=nv0)
             # nv0_acc_t = traci.vehicle.getAcceleration(vehID=nv0)
             # nv0_t = traci.simulation.getTime()
 
             send_nv_info(client_socket, server_address, nv_spd=nv_spd, nv_pos=[nv_pos[0], nv_pos[1], nv_dist])
         
-        if step == 20:
-            update_mache_in_sumo(veh=nv, spd=0)
+        if nv_dist >= 60:
+            # Stall it
+            update_mache_in_sumo(veh=StalledNv, spd=0)
 
         # Retrieve mache's info from TCP server every step
-        if step >= 0:
+        if step >= 600:
             mache_spd, mache_pos = recv_machE_info(client_socket=client_socket)
 
             # Assuming veh_2 has a different ID and we want to set its position and speed in the simulation
@@ -112,7 +113,7 @@ def main():
                 print(f"Mache: Position {mache_pos}, Speed {mache_spd}")
         
         step += 1
-        time.sleep(0.2)
+        time.sleep(0.1)
 
     # Close the SUMO simulation
     traci.close(False)

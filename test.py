@@ -81,7 +81,8 @@ def main():
             # nv0_t = traci.simulation.getTime()
 
         
-        if step == 10:
+        if nv_dist >= 60:
+            # Stall it
             update_mache_in_sumo(veh=nv, spd=0)
 
         # Retrieve mache's info from TCP server every step
@@ -98,6 +99,7 @@ def main():
                 print(f"Mache: Position {mache_pos}, Speed {mache_spd}")
         
         step += 1
+        traci.simulation.saveState("sumo_v2x_cmi.xml")
         time.sleep(0.2)
 
     # Close the SUMO simulation

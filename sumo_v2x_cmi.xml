@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2025-03-17 13:30:46 by Eclipse SUMO GUI Version 1.22.0
+<sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="sumo/v2x/map1.net.xml"/>
+        <route-files value="sumo/v2x/map.rou.xml"/>
+    </input>
+
+    <time>
+        <begin value="0"/>
+        <end value="60"/>
+        <step-length value="0.1"/>
+    </time>
+
+    <traci_server>
+        <remote-port value="42901"/>
+    </traci_server>
+
+    <gui_only>
+        <start value="true"/>
+    </gui_only>
+
+</sumoConfiguration>
+-->
+
+<snapshot xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/state_file.xsd" version="1.22.0" time="20.00" type="micro">
+    <route id="route1" state="1" edges="76146229#1"/>
+    <route id="route2" state="1" edges="-76146229#1"/>
+    <delay number="3" begin="3" end="0" depart="0.00" time="0.00"/>
+    <vType id="car" length="5.00" maxSpeed="15.00" accel="2.6" decel="4.5" sigma="0.3"/>
+    <vehicle id="mache" type="car" depart="0.00" departLane="best" departPos="0.00" departSpeed="0.00" color="green" route="route1" distance="0 0" speedFactor="1.0600" state="2079 0 0 0.00 19900 19.90 19900 0 0" pos="0.00 3.64 0.00" speed="0.00 0.00" angle="333.85" posLat="0.00" waitingTime="100000 1 0 19900"/>
+    <vehicle id="nv0" type="car" depart="0.00" departPos="30.00" route="route1" distance="0 0" speedFactor="0.9383" state="2058 0 0 30.00 0 1.19 19900 0 0" pos="127.62 122.62 0.52" speed="5.20 5.21" angle="324.77" posLat="0.00" waitingTime="100000 0"/>
+    <vehicle id="nv1" type="car" depart="0.00" departPos="15.00" color="255,128,128" route="route1" distance="0 0" speedFactor="1.0104" state="2059 0 0 15.00 6500 8.65 19900 0 0" pos="78.22 73.22 0.00" speed="0.00 0.00" angle="347.97" posLat="0.00" waitingTime="100000 1 0 6500"/>
+    <lane id="76146229#1_0">
+        <vehicles value="mache nv1 nv0"/>
+    </lane>
+</snapshot>
