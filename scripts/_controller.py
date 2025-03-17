@@ -2,7 +2,8 @@ import math
 import csv
 import os
 import numpy as np
-from _cppwrapper import cpp_api
+from _sensor import *
+from _agents import PCC
 
 class IDM():
     def __init__(self, a, b, s0, v0, T):
@@ -34,25 +35,3 @@ class PCC_MPC_controller():
             raise ValueError('PCC class cannot determine system type?!...')
     
         self.api = cpp_api(libraryname)
-    
-    def setPred(self, t, pv_state, cycle_ss, cycle_vs, n_pred_steps=50):
-        dt_pred = 0.10 # Time stepsize between prediction stages [s]
-        t_pred = t # [s]
-
-        k = 0 # First index is current PV states
-        self.api.inputs_p.contents.acc_pred[k] = pv_state[2]
-        self.api.inputs_p.contents.vel_pred[k] = pv_state[1]
-        self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
-        self.api.inputs_p.contents.time_pred[k] = t_pred
-
-        n_pred_steps = 50 # Number of stages the prediction is run for - 50 chosen here for example
-        
-        for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
-            # Include prediction from external module
-            t_pred += dt_pred
-
-            self.api.inputs_p.contents.acc_pred[k] = pv_state[2]
-            self.api.inputs_p.contents.vel_pred[k] = cycle_vs[k-1]
-            self.api.inputs_p.contents.pos_pred[k] = cycle_ss[k-1]
-            
-            self.api.inputs_p.contents.time_pred[k] = t_pred
