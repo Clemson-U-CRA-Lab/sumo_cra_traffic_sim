@@ -9,9 +9,9 @@
     <route id="route2" edges="-76146229#1"/>
 
     <!-- Assign vehicles to routes -->
-    <vehicle id="mache" type="car" route="route1" depart="0" departLane="best" departPos="0" color="1,0,0" departSpeed = "0" />
+    <vehicle id="mache" type="car" route="route1" depart="0" departLane="best" departPos="0" color="0,1,0" departSpeed = "0" />
     <vehicle id="nv0" type="car" route="route1" depart="0" departPos="30"/>
-    <vehicle id="nv1" type="car" route="route1" depart="0" departPos="15"/>
+    <vehicle id="nv1" type="car" route="route1" depart="0" departPos="15" color="1,0.5,0.5"/>
     
     <!-- <vehicle id="veh4" type="car" route="route1" depart="3"/>
     <vehicle id="veh2" type="car" route="route2" depart="5"/>
