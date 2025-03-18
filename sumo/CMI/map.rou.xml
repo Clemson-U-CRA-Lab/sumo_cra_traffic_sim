@@ -18,9 +18,10 @@
     <route id="route2" edges="-76146229#1"/>
 
     <!-- Assign vehicles to routes -->
-    <vehicle id="veh0" type="car" route="route2" depart="0" departPos="30"/>
-    <vehicle id="veh1" type="car" route="route2" depart="0" departPos="15"/>
-    <vehicle id="veh2" type="car" route="route2" depart="0"/>
+    <vehicle id="veh0" type="car" route="route2" depart="0" departPos="36"/>
+    <vehicle id="veh1" type="car" route="route2" depart="0" departPos="26"/>
+    <vehicle id="veh2" type="car" route="route2" depart="0" departPos="16"/>
+    <vehicle id="veh3" type="car" route="route2" depart="0"/>
     <!-- <vehicle id="veh4" type="car" route="route1" depart="3"/>
     <vehicle id="veh2" type="car" route="route2" depart="5"/>
     <vehicle id="veh3" type="car" route="route2" depart="8"/> -->

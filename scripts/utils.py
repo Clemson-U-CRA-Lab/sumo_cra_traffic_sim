@@ -120,3 +120,7 @@ def driving_cycle_spd_profile_reader(driving_cycle_profile_name):
     data_point_dist = [float(point[3]) for point in data_pointes]
     spd_profile = np.transpose(np.array([data_point_t, data_point_spd, data_point_acc, data_point_dist]))
     return spd_profile
+
+def TTCi_estimate(ego_v, front_v, front_s):
+    ttc_i = (ego_v - front_v) / front_s
+    return ttc_i

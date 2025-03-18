@@ -5,37 +5,42 @@
 ### tard(at)anl(dot)gov      ###
 ################################
 
-from math import sin, cos, sqrt, tan, atan, atan2, fmod, pi
+from math import inf, sin, cos, sqrt, tan, atan, atan2, fmod
 import numpy as np
 
 from _constants import * 
 
-def dyn(t, x, u):
-    '''x = [s, v, a], u = ua'''
-    TAUINV = 1./0.275
+### Functions
+def distance(x, x2, y, y2, theta=0.):
+    '''Euclidean distance between points in forward direction from heading theta'''
+    return (x2 - x)*cos(theta) + (y2 - y)*sin(theta)
 
-    return np.array([
-        x[1],
-        x[2],
-        TAUINV*(u[0]-x[2])
-    ])
+def getFrontVeh(nvs, v):
+    '''Get nv immediately in front'''
+    nv_ds = 2000.
+    nv_vr = 20.
+    nv_a = 0.
+    i = -1
 
-def RK2(f, dt, t, x, u):
-    '''Single-step second-order Runge-Kutta integrator'''
-    k1 = dt*f(t, x, u)
-    k2 = dt*f(t+0.5*dt, x+0.5*k1, u)
+    for k in (k for k in range(0, len(nvs)) if v.id != nvs[k].id):
+        d0 = nvs[k].s - (v.s + v.len) # Ego front bumper to nv back bumper
+        
+        if d0 > -2-v.len and d0 < nv_ds: # Behind another neighboring vehicle in current lane
+            nv_ds, nv_vr, nv_a, i = d0, nvs[k].v, nvs[k].a, k
 
-    t = t+dt
-    x = x+0.5*(k1+k2)
-    return x
+    return nv_ds, nv_vr, nv_a, i
 
-def RK4(f, dt, t, x, u):
-    '''Single-step fourth-order Runge-Kutta integrator'''
-    k1 = dt*f(t, x, u)
-    k2 = dt*f(t+0.5*dt, x+0.5*k1, u)
-    k3 = dt*f(t+0.5*dt, x+0.5*k2, u)
-    k4 = dt*f(t+dt, x+k3, u)
-    
-    t = t+dt
-    x = x+0.1666667*(k1+2.*k2+2.*k3+k4)
-    return x
+def getRearVeh(nvs, v):
+    '''Get nv immediately behind'''
+    nv_ds = -2000.
+    nv_vr = 20.
+    nv_a = 0.
+    i = -1
+
+    for k in (k for k in range(0, len(nvs)) if v.id != nvs[k].id):
+        d0 = v.s - (nvs[k].s + nvs[k].len) # Ego back bumper to nv front bumper
+
+        if d0 < 2+nvs[k].len and d0 > nv_ds: # In front of another neighboring vehicle in current lane
+            nv_ds, nv_vr, i = d0, nvs[k].v, nvs[k].a, k
+
+    return nv_ds, nv_vr, nv_a, i

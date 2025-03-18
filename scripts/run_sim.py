@@ -64,41 +64,64 @@ if __name__=="__main__":
     veh_2_lane = []
     veh_2_acc = []
     
+    veh_3_dist = []
+    veh_3_spd = []
+    veh_3_lane = []
+    veh_3_acc = []
+    
     veh_sim_t = []
+    
+    runtime_record = []
     
     current_dirname = os.path.dirname(__file__)
     parent_dir = os.path.abspath(os.path.join(current_dirname, os.pardir))
     spd_filename = parent_dir + "/speed_profile/US06_CMI_Urban_speed_profile.csv"
     leading_vehicle_speed_profile = driving_cycle_spd_profile_reader(spd_filename)
     
-    sumo_sim_manager = sumo_sim(sumo_config_name="sumo/CMI/cmi.sumocfg")
+    sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/CMI/cmi.sumocfg")
     sumo_sim_manager.start_Sumo()
     
-    # Initialize IDM controller
-    IDM_control = IDM(a=4, b=5, s0=3, v0=15, T=1.5)
+    # Initialize controller
+    dirname = os.path.dirname(__file__)
+    nn_pt_filename = dirname + '/traffic_following_control_v0_128.pt'
+    FCN_control = NN_controller(nn_pt_file=nn_pt_filename)
     
     record_t = np.array(leading_vehicle_speed_profile[:, 0])
     front_v_t = np.array(leading_vehicle_speed_profile[:, 1])
     
-    while sumo_sim_manager.step < 750:
+    while sumo_sim_manager.step < 950:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
         # Get leading vehicle speed
         v_lead_id = np.argmin(np.abs([record_t - sim_t]))
         v_tgt_lead = front_v_t[v_lead_id]
-        sumo_sim_manager.assignTargetSpeed(vehicle_ID="veh0", tgt_spd=v_tgt_lead)
+        sumo_sim_manager.assignTargetSpeed(vehicle_ID="veh0", tgt_spd=v_tgt_lead / 1.2)
+        
         [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh0")
         [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh1")
         [veh_2_acc_t, veh_2_spd_t, veh_2_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh2")
+        [veh_3_acc_t, veh_3_spd_t, veh_3_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh3")
         
         # Get back vehicle speed and distance
-        acc_IDM_1 = IDM_control.IDM_acceleration(front_v=veh_0_spd_t, ego_v=veh_1_spd_t, front_s=veh_0_dist_t, ego_s=veh_1_dist_t)
-        acc_IDM_2 = IDM_control.IDM_acceleration(front_v=veh_1_spd_t, ego_v=veh_2_spd_t, front_s=veh_1_dist_t, ego_s=veh_2_dist_t)
+        s_vt_traffic = np.array([veh_1_spd_t, veh_2_spd_t, veh_3_spd_t])
+        pv_vt_traffic = np.array([veh_0_spd_t, veh_1_spd_t, veh_2_spd_t])
+        s_st_traffic = np.array([veh_1_dist_t, veh_2_dist_t, veh_3_dist_t])
+        pv_st_traffic = np.array([veh_0_dist_t, veh_1_dist_t, veh_2_dist_t])
+        
+        # Perform neural network control
+        start_t = time.time()
+        acc_traffic_step_t = FCN_control.step_forward(s_vt=s_vt_traffic, pv_vt=pv_vt_traffic, s_st=s_st_traffic, pv_st=pv_st_traffic)
+        runtime_record.append(time.time() - start_t)
+        
+        acc_1 = acc_traffic_step_t[0]
+        acc_2 = acc_traffic_step_t[1]
+        acc_3 = acc_traffic_step_t[2]
         
         # Assign the acceleration to ego vehicle
-        sumo_sim_manager.assignAcceleration(vehicle_ID="veh1", tgt_acc=acc_IDM_1, dt=0.1)
-        sumo_sim_manager.assignAcceleration(vehicle_ID="veh2", tgt_acc=acc_IDM_2, dt=0.1)
+        sumo_sim_manager.assignAcceleration(vehicle_ID="veh1", tgt_acc=acc_1, dt=0.1)
+        sumo_sim_manager.assignAcceleration(vehicle_ID="veh2", tgt_acc=acc_2, dt=0.1)
+        sumo_sim_manager.assignAcceleration(vehicle_ID="veh3", tgt_acc=acc_3, dt=0.1)
         
         veh_0_acc.append(veh_0_acc_t)
         veh_0_spd.append(veh_0_spd_t)
@@ -112,9 +135,15 @@ if __name__=="__main__":
         veh_2_spd.append(veh_2_spd_t)
         veh_2_dist.append(veh_2_dist_t)
         
+        veh_3_acc.append(veh_3_acc_t)
+        veh_3_spd.append(veh_3_spd_t)
+        veh_3_dist.append(veh_3_dist_t)
+        
         veh_sim_t.append(sim_t)
         
         time.sleep(0.01)
+    
+    print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
     
     plt.figure(1)
     
@@ -122,17 +151,19 @@ if __name__=="__main__":
     plt.plot(veh_sim_t, veh_0_dist)
     plt.plot(veh_sim_t, veh_1_dist)
     plt.plot(veh_sim_t, veh_2_dist)
+    plt.plot(veh_sim_t, veh_3_dist)
     plt.xlabel('Time [s]')
     plt.ylabel('Distance from route edge [m]')
-    plt.legend(['Leading Vehicle', 'Vehicle 0', 'Vehicle 1'])
+    plt.legend(['Leading Vehicle', 'Vehicle 0', 'Vehicle 1', 'Vehicle 2'])
     
     plt.subplot(2,1,2)
     plt.plot(veh_sim_t, veh_0_spd)
     plt.plot(veh_sim_t, veh_1_spd)
     plt.plot(veh_sim_t, veh_2_spd)
+    plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Speed [m/s]')
-    plt.legend(['Leading Vehicle', 'Vehicle 0', 'Vehicle 1'])
+    plt.legend(['Leading Vehicle', 'Vehicle 0', 'Vehicle 1', 'Vehicle 2'])
     
     plt.show()
     
