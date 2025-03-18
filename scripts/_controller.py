@@ -3,6 +3,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from scipy.interpolate import RegularGridInterpolator
+
 import math
 import csv
 import os
@@ -85,3 +87,36 @@ class NN_controller():
         
         # Return control value
         return ego_a_tgt
+    
+class lookup_table_controller():
+    def __init__(self, table_filename, max_s1, max_s2, max_dv, num_s1, num_s2, num_dv):
+        self.s1_range = np.linspace(-1.0, max_s1, num_s1)
+        self.s2_range = np.linspace(-1.0, max_s2, num_s2)
+        self.dv_range = np.linspace(-1.0, max_dv, num_dv)
+        
+        with open(table_filename, 'rb') as f:
+            u_table = np.load(f)
+        
+        self.fn_table = RegularGridInterpolator((self.s1_range, self.s2_range, self.dv_range), u_table)
+    
+    def step_forward(self, ds1, ds2, ego_v_t):
+        input_vec = np.array([ds1, ds2, ego_v_t])
+        s_a_table_tgt = (self.fn_table(input_vec.T).tolist())
+        
+    def pred_s(self, ego_s, veh_a, veh_v, veh_s, Dt = 5):
+        veh_v_1 = np.max([veh_v + veh_a * Dt, 0])
+        ds1 = veh_s - ego_s
+        ds2 = (veh_v_1**2 - veh_v**2) / (2 * veh_a)
+        
+        return ds1, ds2
+    
+    def preview_s(self, ego_s, veh_init, veh_s, cycle_t, cycle_s, Dt = 5):
+        # Find current speed
+        t_id = np.argmin(np.abs(np.array(cycle_s) - (veh_s - veh_init)))
+        sim_T_esti = cycle_t[t_id]
+        t_id_terminal = np.argmin(np.abs(np.array(cycle_t) - (sim_T_esti + Dt)))
+        cycle_terminal = cycle_s[t_id_terminal]
+        ds1 = veh_s - ego_s
+        ds2 = cycle_terminal - veh_s
+        
+        return ds1, ds2

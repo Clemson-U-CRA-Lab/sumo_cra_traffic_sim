@@ -96,7 +96,7 @@ if __name__=="__main__":
         # Get leading vehicle speed
         v_lead_id = np.argmin(np.abs([record_t - sim_t]))
         v_tgt_lead = front_v_t[v_lead_id]
-        sumo_sim_manager.assignTargetSpeed(vehicle_ID="veh0", tgt_spd=v_tgt_lead / 1.2)
+        sumo_sim_manager.assignTargetSpeed(vehicle_ID="veh0", tgt_spd=v_tgt_lead)
         
         [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh0")
         [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh1")
