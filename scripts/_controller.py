@@ -103,20 +103,23 @@ class lookup_table_controller():
         input_vec = np.array([ds1, ds2, ego_v_t])
         s_a_table_tgt = (self.fn_table(input_vec.T).tolist())
         
+        return s_a_table_tgt
+        
     def pred_s(self, ego_s, veh_a, veh_v, veh_s, Dt = 5):
-        veh_v_1 = np.max([veh_v + veh_a * Dt, 0])
-        ds1 = veh_s - ego_s
-        ds2 = (veh_v_1**2 - veh_v**2) / (2 * veh_a)
+        if veh_v + veh_a * Dt < 0:
+            t_to_stop = np.abs(veh_v / veh_a)
+            ds1 = veh_s - ego_s
+            ds2 = veh_v * Dt + 0.5 * veh_a * t_to_stop ** 2
+        else:
+            ds1 = veh_s - ego_s
+            ds2 = veh_v * Dt + 0.5 * veh_a * Dt ** 2
         
         return ds1, ds2
     
-    def preview_s(self, ego_s, veh_init, veh_s, cycle_t, cycle_s, Dt = 5):
-        # Find current speed
-        t_id = np.argmin(np.abs(np.array(cycle_s) - (veh_s - veh_init)))
-        sim_T_esti = cycle_t[t_id]
-        t_id_terminal = np.argmin(np.abs(np.array(cycle_t) - (sim_T_esti + Dt)))
+    def preview_s(self, sim_t, ego_s, veh_init, veh_s, cycle_t, cycle_s, Dt = 5):
+        t_id_terminal = np.argmin(np.abs(np.array(cycle_t) - (sim_t + Dt)))
         cycle_terminal = cycle_s[t_id_terminal]
         ds1 = veh_s - ego_s
-        ds2 = cycle_terminal - veh_s
+        ds2 = cycle_terminal - veh_s + veh_init
         
         return ds1, ds2
