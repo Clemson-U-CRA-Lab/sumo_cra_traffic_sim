@@ -45,7 +45,7 @@ class _vehicle:
 
 class PCC(_vehicle):
     '''CAV driver for virtual automated vehicles'''
-    def __init__(self, s=0., v=0., a=0., v_max = 10.):
+    def __init__(self, dirname, s=0., v=0., a=0., v_max = 10.):
         super().__init__(s, v, a)
 
         self.type = VEHTYPE.PCC
@@ -64,7 +64,7 @@ class PCC(_vehicle):
         else:
             raise ValueError('PCC class cannot determine system type!')
             
-        self.api = cpp_api(libraryname)
+        self.api = cpp_api(dirname + '/' + libraryname)
 
     def predAcc(self, t, pv_state, v_max):
         dt_pred = 0.20 # Time stepsize between prediction stages [s]
@@ -107,7 +107,7 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
-        n_pred_steps = 50 # Number of stages the prediction is run for - 50 chosen here for example
+        n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
         for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
             # Include prediction from external module
             t_pred += dt_pred
@@ -117,6 +117,81 @@ class PCC(_vehicle):
             self.api.inputs_p.contents.pos_pred[k] = cycle_ss[k-1]
             
             self.api.inputs_p.contents.time_pred[k] = t_pred
+    
+    def setCommand_SUMO(self, t, ego_s, ego_v, ego_a, pv_s, pv_v, pv_a, cycle_ss, cycle_vs, pv_ind=0):
+        '''Set the control commands, for example desired acceleration and desired lane'''
+        # Controller parameters
+        s_max = 5000 # Max position [m]
+        v_max = self.v_max # Max velocity [m/s]
+        
+        ### Assign inputs struct properties
+        ### The goal here is to collect vehicle sensor signals and pack them into inputs_p
+        self.api.inputs_p.contents.t = t # Dereference pointer with .contents method
+        
+        # Ego vehicle states
+        self.api.inputs_p.contents.ego_state[0] = ego_s # self.s + self.len # MPC wants the Frenet front bumper position - the simulation was written so that .s is the back bumper position for each simulated vehicle so add vehicle len to get front bumper
+        self.api.inputs_p.contents.ego_state[1] = ego_v # self.v # Frenet forward velocity
+        self.api.inputs_p.contents.ego_state[2] = ego_a # self.a # Frenet forward acceleration - use previous Ua command if unknown/very inaccurate ego accel
+        
+        pv_state = [None]*3
+        if pv_ind >= 0:
+            pv_state[0] = pv_s # Expects Frenet back bumper position - Front Bumper to back bumper Gap from sensor + Ego S
+            pv_state[1] = pv_v # Forward velocity
+            pv_state[2] = pv_a # Forward acceleration
+
+        else:
+            pv_state[0] = pv_s # pv s
+            pv_state[1] = 0 # pv v
+            pv_state[2] = 0 # pv a
+
+        self.dgap = pv_s - ego_s
+
+        # Reset the prediction inputs - just in case it is needed
+        c_array_len = 201 # The total len of the c array - match with the _cppwrapper.py and their equivalent definitions in the EXTU struct found in longitudinal_mpc.h
+        for k in range(0, c_array_len):
+            self.api.inputs_p.contents.acc_pred[k] = nan
+            self.api.inputs_p.contents.vel_pred[k] = nan
+            self.api.inputs_p.contents.pos_pred[k] = nan
+            self.api.inputs_p.contents.time_pred[k] = nan
+
+        # Predict PV motion and then write to inputs
+        self.setPred(t, pv_state, cycle_ss, cycle_vs)
+        
+        # Ego vehicle state constraints
+        self.api.inputs_p.contents.pos_max = s_max
+        self.api.inputs_p.contents.vel_max = v_max
+
+        ### Run the autogen controller
+        self.api.step_inputs() # Reads inputs_p and writes them to controller
+        self.api.step_controller() # Steps the controller
+        self.api.step_outputs() # Writes the outputs from controller to outputs_p
+
+        ### Assign outputs struct properties
+        acc_des = self.api.outputs_p.contents.acc_des
+
+        state_trajectory = self.api.outputs_p.contents.state_trajectory
+        # control_trajectory = self.api.outputs_p.contents.control_trajectory
+        # time_trajectory = self.api.outputs_p.contents.time_trajectory
+        # slacks = self.api.outputs_p.contents.slacks
+        # reference = self.api.outputs_p.contents.reference
+        # constraint = self.api.outputs_p.contents.constraint
+        # cost = self.api.outputs_p.contents.cost
+        self.exitflag = self.api.outputs_p.contents.exitflag
+
+        ### Log the inputs to the MPC inputs_p.contents here
+        ### Log the outputs from the MPC outputs_p.contents here
+
+        ### Assign the control
+        # Commanded immediate acceleration
+        self.ua = acc_des # Desired acceleration [m/s2]
+        
+        n_states = 3 # Number of states in the MPC - fixed number
+
+        pos_traj = state_trajectory[0::n_states] # Pos state starts at index 0
+        vel_traj = state_trajectory[1::n_states] # Vel state starts at index 1
+        # acc_traj = state_trajectory[2::n_states] # Acc state starts at index 2
+        
+        return pos_traj, vel_traj, acc_des
 
     def setCommand(self, nvs, t):
         '''Set the control commands, for example desired acceleration and desired lane'''

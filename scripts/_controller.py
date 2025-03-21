@@ -30,24 +30,15 @@ class IDM():
         return acc
     
 class PCC_MPC_controller():
-    def __init__(self):
+    def __init__(self, dirname):
         self.s = 0.0
         self.v = 0.0
         self.a = 0.0
-        self.svs = PCC(self.s, self.v, self.a, v_max=20)
+        self.svs = PCC(dirname, self.s, self.v, self.a, v_max=20)
         
-        if os.name == 'nt':
-            libraryname = 'pcc_so'
-        elif os.name == 'posix':
-            libraryname = 'libpcc_so'
-        else:
-            raise ValueError('PCC class cannot determine system type?!...')
-    
-        self.api = cpp_api(libraryname)
-    
     def step_forward(self, PV_ds, PV_v, PV_a, future_s, future_v, t):
         # Find control from MPC optimization and control the vehicle
-        self.svs.setCommand_SUMO(t=t, pv_ds=PV_ds, pv_v=PV_v, pv_a=PV_a, pv_ind=0, cycle_ss=future_s, cycle_vs=future_v)
+        pred_pose = self.svs.setCommand_SUMO(t=t, pv_ds=PV_ds, pv_v=PV_v, pv_a=PV_a, pv_ind=0, cycle_ss=future_s, cycle_vs=future_v)
 
 class Model(nn.Module):
     def __init__(self, in_features=3, h1=256, h2=256, h3=32, out_features=1):

@@ -1,6 +1,7 @@
 import math
 import csv
 import numpy as np
+import scipy
 
 class IDM():
     def __init__(self, a, b, s0, v0, T):
@@ -124,3 +125,33 @@ def driving_cycle_spd_profile_reader(driving_cycle_profile_name):
 def TTCi_estimate(ego_v, front_v, front_s):
     ttc_i = (ego_v - front_v) / front_s
     return ttc_i
+
+def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
+                                    veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
+                                    veh_2_acc_t, veh_2_spd_t, veh_2_dist_t,
+                                    veh_3_acc_t, veh_3_spd_t, veh_3_dist_t,
+                                    sim_t, record_t, front_v_t, online_MPC_control):
+    
+    # Find leading vehicle's driving cycle
+    cycle_vs = np.empty(32)
+    cycle_vs.fill(np.nan)
+    
+    for i in range(32):
+        t_id = np.argmin(np.abs([record_t - (i * 0.1 + sim_t)]))
+        cycle_vs[i] = front_v_t[t_id]
+    
+    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=0.1) + veh_0_dist_t
+    
+    veh_1_pred_s, veh_1_pred_v, acc_1 = online_MPC_control.svs.setCommand_SUMO(t = sim_t, ego_s=veh_1_dist_t, ego_v=veh_1_spd_t, ego_a=veh_1_acc_t,
+                                                   pv_s=veh_0_dist_t, pv_v=veh_0_spd_t, pv_a=veh_0_acc_t, cycle_ss=cycle_ss,
+                                                   cycle_vs=cycle_vs)
+    
+    veh_2_pred_s, veh_2_pred_v, acc_2 = online_MPC_control.svs.setCommand_SUMO(t = sim_t, ego_s=veh_2_dist_t, ego_v=veh_2_spd_t, ego_a=veh_2_acc_t,
+                                                   pv_s=veh_1_dist_t, pv_v=veh_1_spd_t, pv_a=veh_1_acc_t, cycle_ss=veh_1_pred_s,
+                                                   cycle_vs=veh_1_pred_v)
+    
+    veh_3_pred_s, veh_3_pred_v, acc_3 = online_MPC_control.svs.setCommand_SUMO(t = sim_t, ego_s=veh_3_dist_t, ego_v=veh_3_spd_t, ego_a=veh_3_acc_t,
+                                                   pv_s=veh_2_dist_t, pv_v=veh_2_spd_t, pv_a=veh_2_acc_t, cycle_ss=veh_2_pred_s,
+                                                   cycle_vs=veh_2_pred_v)
+    
+    return [acc_1, acc_2, acc_3]

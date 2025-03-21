@@ -7,6 +7,7 @@ import traci.constants as tc
 import matplotlib.pyplot as plt
 from utils import *
 from _controller import *
+from _constants import *
 import time
 class sumo_sim():
     def __init__(self, sumo_config_name):
@@ -48,6 +49,7 @@ class sumo_sim():
         self.vehID_list = traci.vehicle.getIDList()
         self.step += 1
 
+
 if __name__=="__main__":
     veh_0_dist = []
     veh_0_spd = []
@@ -85,10 +87,18 @@ if __name__=="__main__":
     dirname = os.path.dirname(__file__)
     nn_pt_filename = dirname + '/traffic_following_control_v0_128.pt'
     table_filename = dirname + '/Utable_2states_MPC_terminal.npy'
-    FCN_control = NN_controller(nn_pt_file=nn_pt_filename)
-    LKTable_control = lookup_table_controller(table_filename=table_filename, max_s1=150, max_s2=150,
-                                              max_dv=30, num_s1=20, num_s2=20, num_dv=15)
     
+    # Setup controller
+    if USING_NEURAL_NETWORK:
+        FCN_control = NN_controller(nn_pt_file=nn_pt_filename)
+    elif USING_LOOKUP_TABLE:
+        LKTable_control = lookup_table_controller(table_filename=table_filename, max_s1=150, max_s2=150,
+                                              max_dv=30, num_s1=20, num_s2=20, num_dv=15)
+    elif USING_ONLINE_MPC:
+        online_MPC_control = PCC_MPC_controller(dirname=dirname)
+    else:
+        print('No controller for all vehicles')
+        
     record_t = np.array(leading_vehicle_speed_profile[:, 0])
     front_v_t = np.array(leading_vehicle_speed_profile[:, 1])
     front_s_t = np.array(leading_vehicle_speed_profile[:, 3])
@@ -107,22 +117,31 @@ if __name__=="__main__":
         [veh_2_acc_t, veh_2_spd_t, veh_2_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh2")
         [veh_3_acc_t, veh_3_spd_t, veh_3_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh3")
         
-        # Get back vehicle speed and distance
-        s_vt_traffic = np.array([veh_1_spd_t, veh_2_spd_t, veh_3_spd_t])
-        pv_vt_traffic = np.array([veh_0_spd_t, veh_1_spd_t, veh_2_spd_t])
-        s_st_traffic = np.array([veh_1_dist_t, veh_2_dist_t, veh_3_dist_t])
-        pv_st_traffic = np.array([veh_0_dist_t, veh_1_dist_t, veh_2_dist_t])
-        
-        # Find reference states for lookup table
-        ds1_0, ds2_0 = LKTable_control.preview_s(sim_t, veh_1_dist_t, veh_init=30, veh_s=veh_0_dist_t, cycle_t=record_t, cycle_s=front_s_t)
-        ds1_1, ds2_1 = LKTable_control.pred_s(ego_s=veh_2_dist_t, veh_a=veh_1_acc_t, veh_v=veh_1_spd_t, veh_s=veh_1_dist_t)
-        ds1_2, ds2_2 = LKTable_control.pred_s(ego_s=veh_3_dist_t, veh_a=veh_2_acc_t, veh_v=veh_2_spd_t, veh_s=veh_2_dist_t)
-        
         # Perform neural network control
         start_t = time.time()
-        # acc_traffic_step_t = FCN_control.step_forward(s_vt=s_vt_traffic, pv_vt=pv_vt_traffic, s_st=s_st_traffic, pv_st=pv_st_traffic)
-        acc_traffic_step_t = LKTable_control.step_forward([ds1_0, ds1_1, ds1_2], [ds2_0, ds2_1, ds2_2], [veh_1_spd_t, veh_2_spd_t, veh_3_spd_t])
         
+        if USING_ONLINE_MPC:
+            acc_traffic_step_t = traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
+                                                                     veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
+                                                                     veh_2_acc_t, veh_2_spd_t, veh_2_dist_t,
+                                                                     veh_3_acc_t, veh_3_spd_t, veh_3_dist_t,
+                                                                     sim_t, record_t, front_v_t, online_MPC_control)
+        elif USING_LOOKUP_TABLE:
+            # Find reference states for lookup table
+            ds1_0, ds2_0 = LKTable_control.preview_s(sim_t, veh_1_dist_t, veh_init=30, veh_s=veh_0_dist_t, cycle_t=record_t, cycle_s=front_s_t)
+            ds1_1, ds2_1 = LKTable_control.pred_s(ego_s=veh_2_dist_t, veh_a=veh_1_acc_t, veh_v=veh_1_spd_t, veh_s=veh_1_dist_t)
+            ds1_2, ds2_2 = LKTable_control.pred_s(ego_s=veh_3_dist_t, veh_a=veh_2_acc_t, veh_v=veh_2_spd_t, veh_s=veh_2_dist_t)
+            acc_traffic_step_t = LKTable_control.step_forward([ds1_0, ds1_1, ds1_2], [ds2_0, ds2_1, ds2_2], [veh_1_spd_t, veh_2_spd_t, veh_3_spd_t])
+        elif USING_NEURAL_NETWORK:
+            # Get back vehicle speed and distance
+            s_vt_traffic = np.array([veh_1_spd_t, veh_2_spd_t, veh_3_spd_t])
+            pv_vt_traffic = np.array([veh_0_spd_t, veh_1_spd_t, veh_2_spd_t])
+            s_st_traffic = np.array([veh_1_dist_t, veh_2_dist_t, veh_3_dist_t])
+            pv_st_traffic = np.array([veh_0_dist_t, veh_1_dist_t, veh_2_dist_t])
+            acc_traffic_step_t = FCN_control.step_forward(s_vt=s_vt_traffic, pv_vt=pv_vt_traffic, s_st=s_st_traffic, pv_st=pv_st_traffic)
+        else:
+            acc_traffic_step_t = np.zeros(3)
+            
         runtime_record.append(time.time() - start_t)
         
         acc_1 = acc_traffic_step_t[0]
