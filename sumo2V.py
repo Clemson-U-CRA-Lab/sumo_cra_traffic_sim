@@ -22,7 +22,7 @@ server_address = (SERVER_IP, SERVER_PORT)
 sumoBinary  = "/usr/bin/sumo-gui"
 sumoCmd = [sumoBinary, "-c", "sumo/v2x/v2x.sumocfg"]
 StalledNv = 'nv1' # the car that stalls
-RealNv = "mache"
+RealCav = "mache"
 
 def send_nv_info(client_socket, server_address, nv_spd, nv_pos):
 

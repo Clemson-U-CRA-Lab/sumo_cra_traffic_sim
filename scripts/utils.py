@@ -155,3 +155,52 @@ def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
                                                    cycle_vs=veh_2_pred_v)
     
     return [acc_1, acc_2, acc_3]
+
+
+import numpy as np
+import scipy.integrate
+
+def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix, sim_t, record_t, front_v_t, online_MPC_control):
+    """
+    Perform online MPC control step for multiple vehicles.
+    
+    :param states: List of vehicle states [[acc, spd, dist, lane, pos], [..], ...] in order of leading to trailing.
+    :param sim_t: Current simulation time.
+    :param record_t: time of profile
+    :param front_v_t: Speed profile of the leading vehicle.
+    :param online_MPC_control: MPC controller object.
+    :return: List of computed accelerations for each vehicle except the leader.
+    """
+    num_vehicles = len(nVehicleStatesMatrix)
+    accelerations = {}
+    preds_s = preds_v = {}
+    
+    # Compute leading vehicle's driving cycle
+    cycle_vs = np.full(32, np.nan)
+    for i in range(32):
+        t_id = np.argmin(np.abs(record_t - (i * 0.1 + sim_t)))
+        cycle_vs[i] = front_v_t[t_id]
+    
+    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=0.1, initial=0) + nVehicleStatesMatrix[0][3]
+    
+    
+    # Iterate over states (excluding the leader)
+    prev_pred_s, prev_pred_v = cycle_ss, cycle_vs
+    for i in range(1, num_vehicles):
+
+        ego_acc, ego_spd, ego_dist = nVehicleStatesMatrix[i][1:4]
+        pv_acc, pv_spd, pv_dist = nVehicleStatesMatrix[i - 1][1:4]
+        
+        pred_s, pred_v, acc = online_MPC_control.svs.setCommand_SUMO(
+                                            t=sim_t, ego_s=ego_dist, ego_v=ego_spd, ego_a=ego_acc,
+                                            pv_s=pv_dist, pv_v=pv_spd, pv_a=pv_acc,
+                                            cycle_ss=prev_pred_s, cycle_vs=prev_pred_v
+        )
+        # print(len(pred_s), len(pred_v),len([0, .02, 1]))
+        preds_s[nVehicleStatesMatrix[i][0]] = pred_s
+        preds_v[nVehicleStatesMatrix[i][0]] = pred_v
+        accelerations[nVehicleStatesMatrix[i][0]] = acc
+        
+        prev_pred_s, prev_pred_v = pred_s, pred_v
+    
+    return accelerations, preds_s, preds_v
