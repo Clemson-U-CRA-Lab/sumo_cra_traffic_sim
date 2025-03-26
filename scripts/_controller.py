@@ -96,7 +96,7 @@ class lookup_table_controller():
         
         return s_a_table_tgt
         
-    def pred_s(self, ego_s, veh_a, veh_v, veh_s, Dt = 5):
+    def pred_s(self, ego_s, veh_a, veh_v, veh_s, Dt = 3):
         if veh_v + veh_a * Dt < 0:
             t_to_stop = np.abs(veh_v / veh_a)
             ds1 = veh_s - ego_s
@@ -107,7 +107,7 @@ class lookup_table_controller():
         
         return ds1, ds2
     
-    def preview_s(self, sim_t, ego_s, veh_init, veh_s, cycle_t, cycle_s, Dt = 5):
+    def preview_s(self, sim_t, ego_s, veh_init, veh_s, cycle_t, cycle_s, Dt = 3):
         t_id_terminal = np.argmin(np.abs(np.array(cycle_t) - (sim_t + Dt)))
         cycle_terminal = cycle_s[t_id_terminal]
         ds1 = veh_s - ego_s

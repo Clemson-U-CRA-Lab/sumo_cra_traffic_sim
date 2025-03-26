@@ -9,6 +9,7 @@ from utils import *
 from _controller import *
 from _constants import *
 import time
+import random
 class sumo_sim():
     def __init__(self, sumo_config_name):
         self.sumoBinary = "/usr/bin/sumo-gui"
@@ -71,6 +72,10 @@ if __name__=="__main__":
     veh_3_lane = []
     veh_3_acc = []
     
+    P_1_list = []
+    P_2_list = []
+    P_3_list = []
+    
     veh_sim_t = []
     
     runtime_record = []
@@ -91,11 +96,21 @@ if __name__=="__main__":
     # Setup controller
     if USING_NEURAL_NETWORK:
         FCN_control = NN_controller(nn_pt_file=nn_pt_filename)
+        controller_name = 'Neural_Network'
+        print('Use neural network to control traffic vehicles')
     elif USING_LOOKUP_TABLE:
         LKTable_control = lookup_table_controller(table_filename=table_filename, max_s1=150, max_s2=150,
                                               max_dv=30, num_s1=20, num_s2=20, num_dv=15)
+        controller_name = 'Lookup_Table'
+        print('Use lookup table to control traffic vehicles')
     elif USING_ONLINE_MPC:
         online_MPC_control = PCC_MPC_controller(dirname=dirname)
+        controller_name = 'Online_MPC'
+        print('Use online MPC to control traffic vehicles')
+    elif USING_IDM:
+        IDM_control = IDM(a=4, b=5, s0=3, v0=20, T=1)
+        controller_name = 'Intelligent Driving Model'
+        print('Use IDM to control traffic vehicles')
     else:
         print('No controller for all vehicles')
         
@@ -109,49 +124,50 @@ if __name__=="__main__":
         
         # Get leading vehicle speed
         v_lead_id = np.argmin(np.abs([record_t - sim_t]))
-        v_tgt_lead = front_v_t[v_lead_id]
+        v_tgt_lead = front_v_t[v_lead_id] + 2.0 * (random.random() - 0.5)
         sumo_sim_manager.assignTargetSpeed(vehicle_ID="veh0", tgt_spd=v_tgt_lead)
         
         [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh0")
         [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh1")
-        [veh_2_acc_t, veh_2_spd_t, veh_2_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh2")
-        [veh_3_acc_t, veh_3_spd_t, veh_3_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh3")
+        
+        # Estimate and record power consumption
+        P_1_list.append(engine_power_estimation(veh_1_spd_t, veh_1_acc_t))
         
         # Perform neural network control
         start_t = time.time()
         
         if USING_ONLINE_MPC:
             acc_traffic_step_t = traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
-                                                                     veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
-                                                                     veh_2_acc_t, veh_2_spd_t, veh_2_dist_t,
-                                                                     veh_3_acc_t, veh_3_spd_t, veh_3_dist_t,
-                                                                     sim_t, record_t, front_v_t, online_MPC_control)
+                                                                 veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
+                                                                 sim_t, record_t, front_v_t, online_MPC_control)
         elif USING_LOOKUP_TABLE:
             # Find reference states for lookup table
             ds1_0, ds2_0 = LKTable_control.preview_s(sim_t, veh_1_dist_t, veh_init=30, veh_s=veh_0_dist_t, cycle_t=record_t, cycle_s=front_s_t)
-            ds1_1, ds2_1 = LKTable_control.pred_s(ego_s=veh_2_dist_t, veh_a=veh_1_acc_t, veh_v=veh_1_spd_t, veh_s=veh_1_dist_t)
-            ds1_2, ds2_2 = LKTable_control.pred_s(ego_s=veh_3_dist_t, veh_a=veh_2_acc_t, veh_v=veh_2_spd_t, veh_s=veh_2_dist_t)
-            acc_traffic_step_t = LKTable_control.step_forward([ds1_0, ds1_1, ds1_2], [ds2_0, ds2_1, ds2_2], [veh_1_spd_t, veh_2_spd_t, veh_3_spd_t])
+            acc_traffic_step_t = LKTable_control.step_forward([ds1_0], [ds2_0], [veh_1_spd_t])
         elif USING_NEURAL_NETWORK:
             # Get back vehicle speed and distance
-            s_vt_traffic = np.array([veh_1_spd_t, veh_2_spd_t, veh_3_spd_t])
-            pv_vt_traffic = np.array([veh_0_spd_t, veh_1_spd_t, veh_2_spd_t])
-            s_st_traffic = np.array([veh_1_dist_t, veh_2_dist_t, veh_3_dist_t])
-            pv_st_traffic = np.array([veh_0_dist_t, veh_1_dist_t, veh_2_dist_t])
+            s_vt_traffic = np.array([veh_1_spd_t])
+            pv_vt_traffic = np.array([veh_0_spd_t])
+            s_st_traffic = np.array([veh_1_dist_t])
+            pv_st_traffic = np.array([veh_0_dist_t])
             acc_traffic_step_t = FCN_control.step_forward(s_vt=s_vt_traffic, pv_vt=pv_vt_traffic, s_st=s_st_traffic, pv_st=pv_st_traffic)
+        elif USING_IDM:
+            acc_traffic_step_t = IDM_control.IDM_acceleration(front_v=np.array([veh_0_spd_t]),
+                                                              ego_v=np.array([veh_1_spd_t]),
+                                                              front_s=np.array([veh_0_dist_t]),
+                                                              ego_s=np.array([veh_1_dist_t]))
         else:
             acc_traffic_step_t = np.zeros(3)
             
         runtime_record.append(time.time() - start_t)
         
         acc_1 = acc_traffic_step_t[0]
-        acc_2 = acc_traffic_step_t[1]
-        acc_3 = acc_traffic_step_t[2]
         
         # Assign the acceleration to ego vehicle
         sumo_sim_manager.assignAcceleration(vehicle_ID="veh1", tgt_acc=acc_1, dt=0.1)
-        sumo_sim_manager.assignAcceleration(vehicle_ID="veh2", tgt_acc=acc_2, dt=0.1)
-        sumo_sim_manager.assignAcceleration(vehicle_ID="veh3", tgt_acc=acc_3, dt=0.1)
+        
+        data_logger(sim_t=sim_t, ego_a=acc_1, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
+                    pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename="EPA_SUMO_record_2.csv")
         
         veh_0_acc.append(veh_0_acc_t)
         veh_0_spd.append(veh_0_spd_t)
@@ -161,40 +177,45 @@ if __name__=="__main__":
         veh_1_spd.append(veh_1_spd_t)
         veh_1_dist.append(veh_1_dist_t)
         
-        veh_2_acc.append(veh_2_acc_t)
-        veh_2_spd.append(veh_2_spd_t)
-        veh_2_dist.append(veh_2_dist_t)
-        
-        veh_3_acc.append(veh_3_acc_t)
-        veh_3_spd.append(veh_3_spd_t)
-        veh_3_dist.append(veh_3_dist_t)
-        
         veh_sim_t.append(sim_t)
         
         time.sleep(0.01)
     
+    traci.close(False)
+    
+    veh_sim_t = np.array(veh_sim_t)
+    
+    # Compute total power consumption
+    E_1 = np.sum(np.array(P_1_list) * 0.1)
+    E = E_1
+    
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
+    print('Energy consumption for this traffic section is: ', str(round(E / 1000, 3)) + 'kW')
     
     plt.figure(1)
     
-    plt.subplot(2,1,1)
-    plt.plot(veh_sim_t, veh_0_dist)
-    plt.plot(veh_sim_t, veh_1_dist)
-    plt.plot(veh_sim_t, veh_2_dist)
-    plt.plot(veh_sim_t, veh_3_dist)
-    plt.xlabel('Time [s]')
-    plt.ylabel('Distance from route edge [m]')
-    plt.legend(['Leading Vehicle', 'Vehicle 0', 'Vehicle 1', 'Vehicle 2'])
+    # plt.subplot(2,1,1)
+    # plt.plot(veh_sim_t, veh_0_dist)
+    # plt.plot(veh_sim_t, veh_1_dist)
+    # plt.plot(veh_sim_t, veh_2_dist)
+    # plt.plot(veh_sim_t, veh_3_dist)
+    # plt.xlabel('Time [s]')
+    # plt.ylabel('Distance from route edge [m]')
+    # plt.legend(['Leading Vehicle', 'Vehicle 0', 'Vehicle 1', 'Vehicle 2'])
     
-    plt.subplot(2,1,2)
+    plt.subplot(2,1,1)
+    plt.title(controller_name)
     plt.plot(veh_sim_t, veh_0_spd)
     plt.plot(veh_sim_t, veh_1_spd)
-    plt.plot(veh_sim_t, veh_2_spd)
-    plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Speed [m/s]')
-    plt.legend(['Leading Vehicle', 'Vehicle 0', 'Vehicle 1', 'Vehicle 2'])
+    plt.legend(['Leading Vehicle', 'Vehicle 0'])
+    
+    plt.subplot(2,1,2)
+    plt.plot(veh_sim_t, veh_0_acc)
+    plt.plot(veh_sim_t, veh_1_acc)
+    plt.xlabel('Time [s]')
+    plt.ylabel('Acceleration [m/s^2]')
+    plt.legend(['Leading Vehicle', 'Vehicle 0'])
     
     plt.show()
-    
-    traci.close(False)

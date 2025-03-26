@@ -128,8 +128,6 @@ def TTCi_estimate(ego_v, front_v, front_s):
 
 def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
                                     veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
-                                    veh_2_acc_t, veh_2_spd_t, veh_2_dist_t,
-                                    veh_3_acc_t, veh_3_spd_t, veh_3_dist_t,
                                     sim_t, record_t, front_v_t, online_MPC_control):
     
     # Find leading vehicle's driving cycle
@@ -146,12 +144,26 @@ def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
                                                    pv_s=veh_0_dist_t, pv_v=veh_0_spd_t, pv_a=veh_0_acc_t, cycle_ss=cycle_ss,
                                                    cycle_vs=cycle_vs)
     
-    veh_2_pred_s, veh_2_pred_v, acc_2 = online_MPC_control.svs.setCommand_SUMO(t = sim_t, ego_s=veh_2_dist_t, ego_v=veh_2_spd_t, ego_a=veh_2_acc_t,
-                                                   pv_s=veh_1_dist_t, pv_v=veh_1_spd_t, pv_a=veh_1_acc_t, cycle_ss=veh_1_pred_s,
-                                                   cycle_vs=veh_1_pred_v)
+    return [acc_1]
+
+def engine_power_estimation(ego_v, ego_a):
+    m = 2218 # Vehicle weights
+    rho = 1.293 # Air density
+    Cd = 0.28 # Drag coefficient
+    A = 2.84 # Frontal area
+    mu = 0.015 # Rolling resistance
+    g = 9.8 # Gravity
     
-    veh_3_pred_s, veh_3_pred_v, acc_3 = online_MPC_control.svs.setCommand_SUMO(t = sim_t, ego_s=veh_3_dist_t, ego_v=veh_3_spd_t, ego_a=veh_3_acc_t,
-                                                   pv_s=veh_2_dist_t, pv_v=veh_2_spd_t, pv_a=veh_2_acc_t, cycle_ss=veh_2_pred_s,
-                                                   cycle_vs=veh_2_pred_v)
+    f_aero = 0.5 * A * Cd * rho * ego_v ** 2
+    f_roll = mu * m * g
+    f_inertia = ego_a * m
     
-    return [acc_1, acc_2, acc_3]
+    P = (f_aero + f_roll + f_inertia) * ego_v
+    P = np.max([P, 0])
+    
+    return P
+
+def data_logger(sim_t, ego_a, ego_v, ego_s, pv_a, pv_v, pv_s, filename):
+    with open(filename, "a") as f:
+        writer = csv.writer(f)
+        writer.writerow([sim_t, ego_a, ego_v, ego_s, pv_a, pv_v, pv_s])

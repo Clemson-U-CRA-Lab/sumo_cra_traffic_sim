@@ -135,7 +135,7 @@ class PCC(_vehicle):
         
         pv_state = [None]*3
         if pv_ind >= 0:
-            pv_state[0] = pv_s # Expects Frenet back bumper position - Front Bumper to back bumper Gap from sensor + Ego S
+            pv_state[0] = pv_s  # Expects Frenet back bumper position - Front Bumper to back bumper Gap from sensor + Ego S
             pv_state[1] = pv_v # Forward velocity
             pv_state[2] = pv_a # Forward acceleration
 
@@ -155,7 +155,8 @@ class PCC(_vehicle):
             self.api.inputs_p.contents.time_pred[k] = nan
 
         # Predict PV motion and then write to inputs
-        self.setPred(t, pv_state, cycle_ss, cycle_vs)
+        # self.setPred(t, pv_state, cycle_ss, cycle_vs)
+        self.predAcc(t=t, pv_state=pv_state, v_max=20)
         
         # Ego vehicle state constraints
         self.api.inputs_p.contents.pos_max = s_max
