@@ -90,7 +90,7 @@ if __name__=="__main__":
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
-    nn_pt_filename = dirname + '/traffic_following_control_v0_128.pt'
+    nn_pt_filename = dirname + '/traffic_following_control_v3_256_best.pt'
     table_filename = dirname + '/Utable_2states_MPC_terminal.npy'
     
     # Setup controller
@@ -118,13 +118,13 @@ if __name__=="__main__":
     front_v_t = np.array(leading_vehicle_speed_profile[:, 1])
     front_s_t = np.array(leading_vehicle_speed_profile[:, 3])
     
-    while sumo_sim_manager.step < 950:
+    while sumo_sim_manager.step < 800:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
         # Get leading vehicle speed
         v_lead_id = np.argmin(np.abs([record_t - sim_t]))
-        v_tgt_lead = front_v_t[v_lead_id] + 2.0 * (random.random() - 0.5)
+        v_tgt_lead = front_v_t[v_lead_id] #+ 2.0 * (random.random() - 0.5)
         sumo_sim_manager.assignTargetSpeed(vehicle_ID="veh0", tgt_spd=v_tgt_lead)
         
         [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh0")
@@ -166,8 +166,8 @@ if __name__=="__main__":
         # Assign the acceleration to ego vehicle
         sumo_sim_manager.assignAcceleration(vehicle_ID="veh1", tgt_acc=acc_1, dt=0.1)
         
-        data_logger(sim_t=sim_t, ego_a=acc_1, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
-                    pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename="EPA_SUMO_record_2.csv")
+        # data_logger(sim_t=sim_t, ego_a=acc_1, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
+        #             pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename="EPA_SUMO_record_2.csv")
         
         veh_0_acc.append(veh_0_acc_t)
         veh_0_spd.append(veh_0_spd_t)
