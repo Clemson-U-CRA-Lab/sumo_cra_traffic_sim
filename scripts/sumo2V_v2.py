@@ -10,9 +10,12 @@ from _controller import *
 from _constants import *
 import time
 
+import struct
+from x2v_constants import *
+
 # import classes
 from SumoSim import SumoSim
-from x2vSocketInterface import x2vSocketInterface
+from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
 
 SIM_STEP = 0.1
 StalledNv = 'nv1' # the car that stalls
@@ -21,7 +24,7 @@ RealCav = "nv2" # mache
 if __name__=="__main__":
 
         # Init socket connections
-    # sockInt = x2vSocketInterface()
+    sockInt = x2vSocketInterface()
 
     veh_0_dist = []
     veh_0_spd = []
@@ -58,7 +61,8 @@ if __name__=="__main__":
 
     # Init SUMO sim
     sumo_sim_manager = SumoSim(sumo_config_name=parent_dir + "/sumo/v2x/v2x.sumocfg")
-    sumo_sim_manager.start_Sumo()
+    sumo_sim_manager.start_Sumo(gui=True)
+    traci.vehicle.setSpeed("nv2", 0.0)
 
     
     # Inti and Setup controller
@@ -72,7 +76,7 @@ if __name__=="__main__":
     # Get the real-world start time
     real_start_time = time.monotonic()  
     sim_start_time = 0  # SUMO's starting simulation time
-    while sumo_sim_manager.step < 200:
+    while sumo_sim_manager.step < 300:
         sim_time = traci.simulation.getTime()  # Get SUMO's current simulation time
         # Calculate expected real-time equivalent for SUMO's sim_time
         real_expected_time = real_start_time + (sim_time - sim_start_time)
@@ -107,25 +111,28 @@ if __name__=="__main__":
         runtime_record.append(time.time() - start_t)
 
 
-
-
         # Send NV states to realCAV
         # sim_time, ego_s, ego_v, ego_a  front_s, front_v, front_a, 
         lead_nv_array = [sim_time, 
-                         veh_states_matrix[2][2], veh_states_matrix[2][1], veh_states_matrix[2][4], 
-                         veh_states_matrix[1][2], veh_states_matrix[1][1], veh_states_matrix[1][4]
-                         ] + preds_v['nv1'] + preds_s['nv1']
-        # lead_nv_array = []
-        print(len(lead_nv_array))
-        # sockInt.send_sim_info(lead_nv_array)
+                         veh_states_matrix[2][3], veh_states_matrix[2][2], veh_states_matrix[2][1], # ego
+                         veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1]  # front
+                         ] + preds_v['nv1'] + preds_s['nv1'] # front's
+        # print(len(lead_nv_array))
+        sockInt.send_sim_info(lead_nv_array)
+        print(lead_nv_array[0:6])
 
-        
-        
+        # Recv realCAV info
+        realCavArray = sockInt.recv_veh_info()
+        if realCavArray is not None:        
+            print("RealCAV value: ", realCavArray[0:3])
 
-        
+            # Update Real CAV pos in simulation:::
+            # sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=realCavArray[3], dt=0.1) # careful: assign commmand or real sensed acc?
+            # traci.vehicle.moveToXY(vehID="nv2", edgeID="76146229#1", laneIndex="0", x=mache_pos[0], y=mache_pos[1])
+            traci.vehicle.setSpeed("nv2", realCavArray[2])
+
         # Assign the acceleration to follower vehicle
         sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc["nv1"], dt=0.1)
-        sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=acc["nv2"], dt=0.1)
         
         # Log
         veh_0_acc.append(veh_states_matrix[0][1])

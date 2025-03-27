@@ -13,39 +13,18 @@ import numpy as np
 class SumoSim():
     def __init__(self, sumo_config_name):
         self.sumoBinary = "/usr/bin/sumo-gui"
+        self.sumoBinaryNoGUI = "/usr/bin/sumo"
         self.sumoconfig = sumo_config_name
         self.vehID_list = []
         self.num_veh = len(self.vehID_list)
         self.step = 0
         
-    def start_Sumo(self):
-        sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
-        traci.start(sumoCmd)
-    
-    def getVehicleStates1(self, vehicle_ID, returnStatesNum=4):
-        dtype = [('vehicle_ID', 'U20'), ('speed', 'f4'), ('lane_position', 'f4'), ('lane_ID', 'U20'), ('acceleration', 'f4'), ('position', '2f4')]
-        stateVector = np.zeros(1, dtype=dtype)
-        stateVector['vehicle_ID'] = vehicle_ID
-        if vehicle_ID  in self.vehID_list:
-            stateVector['speed'] = traci.vehicle.getSpeed(vehID=vehicle_ID)
-            stateVector['lane_position'] = traci.vehicle.getLanePosition(vehID=vehicle_ID)
-            stateVector['lane_ID'] = traci.vehicle.getLaneID(vehID=vehicle_ID)
-            stateVector['acceleration'] = traci.vehicle.getAcceleration(vehID=vehicle_ID)
-            stateVector['position'] = traci.vehicle.getPosition(vehID=vehicle_ID)
-            if returnStatesNum == 4:
-                return stateVector[['vehicle_ID', 'acceleration', 'speed', 'lane_position', 'lane_ID',]]
-            elif returnStatesNum == 5:
-                return stateVector[['vehicle_ID', 'acceleration', 'speed', 'lane_position', 'lane_ID', 'position']]
-            else:
-                print(f" Error !!! : Invalid put states requested: {returnStatesNum}")
+    def start_Sumo(self, gui=True):
+        if gui:
+            sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
         else:
-            print(vehicle_ID + " doesn't exist in the traffic")
-            stateVector['speed'] = 0.0
-            stateVector['lane_position'] = 0.0
-            stateVector['lane_ID'] = .0
-            stateVector['acceleration'] = .0
-            stateVector['position'] = .0
-            return stateVector
+            sumoCmd = [self.sumoBinaryNoGUI, "-c", self.sumoconfig]
+        traci.start(sumoCmd)
         
 
     def getVehicleStates(self, vehicle_ID, returnStatesNum=4):
