@@ -13,8 +13,12 @@ import time
 import struct
 from x2v_constants import *
 
+import struct
+from x2v_constants import *
+
 # import classes
 from SumoSim import SumoSim
+from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
 from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
 
 SIM_STEP = 0.1
@@ -24,6 +28,7 @@ RealCav = "nv2" # mache
 if __name__=="__main__":
 
         # Init socket connections
+    sockInt = x2vSocketInterface()
     sockInt = x2vSocketInterface()
 
     veh_0_dist = []
