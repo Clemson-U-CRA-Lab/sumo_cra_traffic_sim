@@ -1,10 +1,18 @@
 #! /usr/bin/env python3
+'''
+Socket interface class to connect with cohda
 
+Ideally, instantiate this object in your main node to send/receive socket info. 
+This way you dont need to deal with writing socket syntax all the time.
+
+Prakhar Gupta
+'''
 import time
 import socket
 import struct
 from x2v_constants import *
 import threading
+from utils import bcolors
 
 # TCP Socket Setup
 SERVER_IP = 'fe80::6e5:48ff:fe30:0820'  # RSU IP address (modify as necessary)
@@ -13,9 +21,9 @@ TIMEOUT = 5  # Timeout
 
 MESSAGE_BYTE_LENGTH = BYTE_SIZE*VEH_ARRAY_SIZE
 
-# same machine testing
-SERVER_IP = 'localhost'
-SERVER_PORT = 7005
+# same machine testing only
+# SERVER_IP = 'localhost'
+# SERVER_PORT = 7005
 
 class x2vSocketInterface:
     def __init__(self, ip=SERVER_IP, port=SERVER_PORT, timeout=TIMEOUT, recv_bytes=MESSAGE_BYTE_LENGTH):
@@ -28,13 +36,13 @@ class x2vSocketInterface:
         self.client_socket = self.wait_for_server()
 
     def wait_for_server(self):
-        print("SOCKET: Starting to attempt connection and wait for server.. ")
+        print("SOCKET: Starting to attempt connection and wait for RSU server.. ")
         count = 0
         while count <= 12:
             try:
                 client_socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
                 client_socket.connect((self.ip, self.port, 0, 2))
-                print("Connected to server (RSU)!")
+                print(f"{bcolors.OKBLUE}Connected to server (RSU)!{bcolors.ENDC}")
                 return client_socket
             except (ConnectionRefusedError, OSError):
                 print(f"Server not available. Retrying for {count}th time in {self.timeout} seconds...")
@@ -58,6 +66,10 @@ class x2vSocketInterface:
 
 
 class x2vSocketInterfaceAsync:
+    '''
+    x2vSocketInterfaceAsync class helps setup a socket connection that doesnt keep the whole code waiting to recv info.
+    This runs a recv fom socket function on separate thread and just updates the 'self.latest_veh_data' attribute when it received new info.
+    '''
     def __init__(self, ip=SERVER_IP, port=SERVER_PORT, timeout=TIMEOUT, recv_bytes=MESSAGE_BYTE_LENGTH):
         print(f"Initializing socket interface to IP:{ip}, port:{port}")
         self.ip = ip
@@ -82,7 +94,7 @@ class x2vSocketInterfaceAsync:
             try:
                 client_socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
                 client_socket.connect((self.ip, self.port, 0, 2))
-                print("Connected to server (RSU)!")
+                print(f"{bcolors.OKBLUE}Connected to server (RSU)!{bcolors.ENDC}")
                 return client_socket
             except (ConnectionRefusedError, OSError):
                 print(f"Server not available. Retrying for {count}th time in {self.timeout} seconds...")

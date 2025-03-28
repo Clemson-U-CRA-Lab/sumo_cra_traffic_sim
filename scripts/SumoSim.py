@@ -1,5 +1,11 @@
 #! /usr/bin/env python3
 
+'''
+SUMO Manager class to control simulations along with VIL and V2X etc in main node
+
+Prakhar Gupta
+'''
+
 import os
 import sys
 import traci
@@ -40,7 +46,7 @@ class SumoSim():
                 return [vehicle_ID, veh_acc_t, veh_spd_t, veh_dist_t, veh_lane_t, veh_pos_t]
             
             else:
-                print(f" Error !!! : Invalid put states requested: {returnStatesNum}")
+                print(f"{bcolors.FAIL} Error !!! : Invalid put states requested: {returnStatesNum}{bcolors.ENDC}")
         else:
             print(vehicle_ID + " doesn't exist in the traffic")
             stateVector = [0.0]*(returnStatesNum+1)
@@ -48,16 +54,27 @@ class SumoSim():
             return stateVector
 
 
-    def update_realCAV_in_sumo(veh="mache", spd=0, pos=None, dist=None):
+    def update_realCAV_in_sumo(self, veh="nv2", spd=0.0, pos=None, dist=None):
         try:
             if pos != None:
                 traci.vehicle.moveToXY(vehID=veh, edgeID="76146229#1", laneIndex="0", x=pos[0], y=pos[1])
             if spd != None:
                 traci.vehicle.setSpeed(vehID=veh, speed=spd)
-            print(f"{veh}: Position {pos}, Speed {spd}")
+            print(f"{bcolors.ENDC}{veh}: Position {pos}, Speed {spd}{bcolors.ENDC}")
         except traci.TraCIException as e:
-            print(f"Error updating vehicle:{veh}'s states  in sim")
+            print(f"{bcolors.FAIL}Error updating vehicle:{veh}'s states  in sim{bcolors.ENDC}")
     
+    def update_CAV_in_sumo(self, veh="nv1", spd=0.0, pos=None, dist=None):
+        try:
+            if pos != None:
+                traci.vehicle.moveToXY(vehID=veh, edgeID="76146229#1", laneIndex="0", x=pos[0], y=pos[1])
+            if spd != None:
+                traci.vehicle.setSpeed(vehID=veh, speed=spd)
+            print(f"{bcolors.ENDC}{veh}: Position {pos}, Speed {spd}{bcolors.ENDC}")
+        except traci.TraCIException as e:
+            print(f"{bcolors.FAIL}Error updating vehicle:{veh}'s states  in sim{bcolors.ENDC}")
+
+
     def assignAcceleration(self, vehicle_ID, tgt_acc, dt):
         if vehicle_ID in self.vehID_list:
             traci.vehicle.setAcceleration(vehID=vehicle_ID, acceleration=tgt_acc, duration=dt)

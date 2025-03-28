@@ -154,6 +154,7 @@ def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
                                                    pv_s=veh_2_dist_t, pv_v=veh_2_spd_t, pv_a=veh_2_acc_t, cycle_ss=veh_2_pred_s,
                                                    cycle_vs=veh_2_pred_v)
     
+    
     return [acc_1, acc_2, acc_3]
 
 
@@ -173,7 +174,8 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix, sim_t, record_t, 
     """
     num_vehicles = len(nVehicleStatesMatrix)
     accelerations = {}
-    preds_s = preds_v = {}
+    preds_s ={}
+    preds_v = {}
     
     # Compute leading vehicle's driving cycle
     cycle_vs = np.full(32, np.nan)
@@ -204,3 +206,18 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix, sim_t, record_t, 
         prev_pred_s, prev_pred_v = pred_s, pred_v
     
     return accelerations, preds_s, preds_v
+
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    FAIL_RED =  '\033[91m'
+    HEADER_MAGENTA = '\033[95m'
+    WARNING_YELLOW = '\033[93m'

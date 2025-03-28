@@ -2,6 +2,7 @@ TODO:
 
 7. multiple tcp sockets
 
+1. timeout in c
 1. MPC for ego real vehicle
 3. 1 nv + ego in sim
 6. Update array size. - in RSU/OBU

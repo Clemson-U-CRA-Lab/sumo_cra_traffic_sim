@@ -19,7 +19,6 @@ from x2v_constants import *
 # import classes
 from SumoSim import SumoSim
 from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
-from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
 
 SIM_STEP = 0.1
 StalledNv = 'nv1' # the car that stalls
@@ -27,8 +26,7 @@ RealCav = "nv2" # mache
 
 if __name__=="__main__":
 
-        # Init socket connections
-    sockInt = x2vSocketInterface()
+    # Init socket connections
     sockInt = x2vSocketInterface()
 
     veh_0_dist = []
@@ -81,7 +79,7 @@ if __name__=="__main__":
     # Get the real-world start time
     real_start_time = time.monotonic()  
     sim_start_time = 0  # SUMO's starting simulation time
-    while sumo_sim_manager.step < 300:
+    while sumo_sim_manager.step < 600:
         sim_time = traci.simulation.getTime()  # Get SUMO's current simulation time
         # Calculate expected real-time equivalent for SUMO's sim_time
         real_expected_time = real_start_time + (sim_time - sim_start_time)
@@ -115,29 +113,36 @@ if __name__=="__main__":
                 acc[veh] = 0.0
         runtime_record.append(time.time() - start_t)
 
+        # Assign the acceleration to follower vehicle nv1
+        if sim_time >= 45.0:
+            # Stalling it at 45 seconds
+            # traci.vehicle.setStop(vehID='nv1', edgeID="76146229#1")
+            sumo_sim_manager.update_CAV_in_sumo(veh='nv1', spd=0.0)
+        else:
+            sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc["nv1"], dt=0.1)
+            
 
-        # Send NV states to realCAV
-        # sim_time, ego_s, ego_v, ego_a  front_s, front_v, front_a, 
+        # sim_time, ego_s, ego_v, ego_a  front_s, front_v, front_a, ...
         lead_nv_array = [sim_time, 
-                         veh_states_matrix[2][3], veh_states_matrix[2][2], veh_states_matrix[2][1], # ego
-                         veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1]  # front
-                         ] + preds_v['nv1'] + preds_s['nv1'] # front's
-        # print(len(lead_nv_array))
+                        veh_states_matrix[2][3], veh_states_matrix[2][2], veh_states_matrix[2][1], # ego
+                        veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1]  # front
+                        ] + preds_s['nv1'] + preds_v['nv1'] # front's s, front's v
+        # Send NV states to realCAV
         sockInt.send_sim_info(lead_nv_array)
-        print(lead_nv_array[0:6])
+        print(f"{lead_nv_array[0], lead_nv_array[1:4], lead_nv_array[4:7]}")
+        # print(f"{bcolors.OKBLUE} {preds_s['nv2']} {bcolors.ENDC}")
+        # print(f"{bcolors.OKCYAN} {preds_v['nv2']} {bcolors.ENDC}")
 
-        # Recv realCAV info
+        # Recv realCAV info and updat ereal CAV in sim
         realCavArray = sockInt.recv_veh_info()
         if realCavArray is not None:        
             print("RealCAV value: ", realCavArray[0:3])
-
             # Update Real CAV pos in simulation:::
             # sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=realCavArray[3], dt=0.1) # careful: assign commmand or real sensed acc?
             # traci.vehicle.moveToXY(vehID="nv2", edgeID="76146229#1", laneIndex="0", x=mache_pos[0], y=mache_pos[1])
-            traci.vehicle.setSpeed("nv2", realCavArray[2])
+            # traci.vehicle.setSpeed("nv2", realCavArray[2])
+            sumo_sim_manager.update_realCAV_in_sumo(veh='nv2', spd=realCavArray[2])
 
-        # Assign the acceleration to follower vehicle
-        sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc["nv1"], dt=0.1)
         
         # Log
         veh_0_acc.append(veh_states_matrix[0][1])
@@ -158,7 +163,7 @@ if __name__=="__main__":
         real_now = time.monotonic()
         sleep_time = max(0, real_expected_time - real_now)  # Sleep only if ahead of real time
         time.sleep(sleep_time)  # Sync with real-world time
-        print(f"Real elapsed: {real_now - real_start_time:.3f}s, Sim Time: {sim_time:.3f}s")
+        print(f"{bcolors.OKCYAN}Elapsed::: Real: {real_now - real_start_time:.3f}s, Sim: {sim_time:.3f}s {bcolors.ENDC}")
     
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
     
@@ -171,7 +176,7 @@ if __name__=="__main__":
     # plt.plot(veh_sim_t, veh_3_dist)
     plt.xlabel('Time [s]')
     plt.ylabel('Distance from route edge [m]')
-    plt.legend(['Leading Vehicle', 'Vehicle 0', 'Vehicle 1', 'Vehicle 2'])
+    plt.legend(['Leading Vehicle', 'Vehicle 1', 'MachE'])
     
     plt.subplot(2,1,2)
     plt.plot(veh_sim_t, veh_0_spd)
@@ -180,7 +185,7 @@ if __name__=="__main__":
     # plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Speed [m/s]')
-    plt.legend(['Leading Vehicle', 'Vehicle 0', 'Vehicle 1', 'Vehicle 2'])
+    plt.legend(['Leading Vehicle', 'Vehicle 1', 'MachE'])
     
     plt.show()
     

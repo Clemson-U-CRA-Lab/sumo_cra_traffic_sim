@@ -1,5 +1,8 @@
 #! /usr/bin/env python3
 
+# Has not TCP sockets. Simple scenario wih mpc-pcc. sumo2v_v2.py has tcp sockets too.
+# this was a WIP towards sumo2V_v2.py
+
 import os
 import sys
 import traci
@@ -103,12 +106,16 @@ if __name__=="__main__":
             for veh in vehicle_list:
                 acc[veh] = 0.0
         runtime_record.append(time.time() - start_t)
+
+        print(acc["nv1"])
+        print(preds_v["nv1"])
+        print(preds_s["nv1"])
         
         # Assign the acceleration to follower vehicle
         sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc["nv1"], dt=0.1)
         sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=acc["nv2"], dt=0.1)
         
-        # Log
+        # Lognv2
         veh_0_acc.append(veh_states_matrix[0][1])
         veh_0_spd.append(veh_states_matrix[0][2])
         veh_0_dist.append(veh_states_matrix[0][3])
