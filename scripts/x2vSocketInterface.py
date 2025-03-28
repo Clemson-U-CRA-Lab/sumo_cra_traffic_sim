@@ -14,16 +14,6 @@ from x2v_constants import *
 import threading
 from utils import bcolors
 
-# TCP Socket Setup
-SERVER_IP = 'fe80::6e5:48ff:fe30:0820'  # RSU IP address (modify as necessary)
-SERVER_PORT = 7002  # Server port
-TIMEOUT = 5  # Timeout
-
-MESSAGE_BYTE_LENGTH = BYTE_SIZE*VEH_ARRAY_SIZE
-
-# same machine testing only
-# SERVER_IP = 'localhost'
-# SERVER_PORT = 7005
 
 class x2vSocketInterface:
     def __init__(self, ip=SERVER_IP, port=SERVER_PORT, timeout=TIMEOUT, recv_bytes=MESSAGE_BYTE_LENGTH):

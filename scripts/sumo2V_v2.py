@@ -18,9 +18,13 @@ from x2v_constants import *
 
 # import classes
 from SumoSim import SumoSim
-from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
 
-SIM_STEP = 0.1
+asyncSocket = True
+if asyncSocket:
+    from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
+else:
+    from x2vSocketInterface import x2vSocketInterface as x2vSocketInterface
+
 StalledNv = 'nv1' # the car that stalls
 RealCav = "nv2" # mache
 
@@ -79,7 +83,7 @@ if __name__=="__main__":
     # Get the real-world start time
     real_start_time = time.monotonic()  
     sim_start_time = 0  # SUMO's starting simulation time
-    while sumo_sim_manager.step < 600:
+    while sumo_sim_manager.step < 60/SIM_STEP:
         sim_time = traci.simulation.getTime()  # Get SUMO's current simulation time
         # Calculate expected real-time equivalent for SUMO's sim_time
         real_expected_time = real_start_time + (sim_time - sim_start_time)
@@ -118,30 +122,42 @@ if __name__=="__main__":
             # Stalling it at 45 seconds
             # traci.vehicle.setStop(vehID='nv1', edgeID="76146229#1")
             sumo_sim_manager.update_CAV_in_sumo(veh='nv1', spd=0.0)
+            lead_nv_array = [sim_time, 
+                            veh_states_matrix[2][3], veh_states_matrix[2][2], veh_states_matrix[2][1], # ego
+                            veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1]  # front
+                            ] + [veh_states_matrix[1][3]]*32 + [0.0]*32 # front's s, front's v
         else:
             sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc["nv1"], dt=0.1)
+            # sim_time, ego_s, ego_v, ego_a  front_s, front_v, front_a, ...
+            lead_nv_array = [sim_time, 
+                            veh_states_matrix[2][3], veh_states_matrix[2][2], veh_states_matrix[2][1], # ego
+                            veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1]  # front
+                            ] + preds_s['nv1'] + preds_v['nv1'] # front's s, front's v
             
-
-        # sim_time, ego_s, ego_v, ego_a  front_s, front_v, front_a, ...
-        lead_nv_array = [sim_time, 
-                        veh_states_matrix[2][3], veh_states_matrix[2][2], veh_states_matrix[2][1], # ego
-                        veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1]  # front
-                        ] + preds_s['nv1'] + preds_v['nv1'] # front's s, front's v
         # Send NV states to realCAV
         sockInt.send_sim_info(lead_nv_array)
-        print(f"{lead_nv_array[0], lead_nv_array[1:4], lead_nv_array[4:7]}")
+        print(f"Send Front info: {lead_nv_array[0], lead_nv_array[1:4], lead_nv_array[4:7]}")
         # print(f"{bcolors.OKBLUE} {preds_s['nv2']} {bcolors.ENDC}")
         # print(f"{bcolors.OKCYAN} {preds_v['nv2']} {bcolors.ENDC}")
 
         # Recv realCAV info and updat ereal CAV in sim
         realCavArray = sockInt.recv_veh_info()
         if realCavArray is not None:        
-            print("RealCAV value: ", realCavArray[0:3])
+            print(f"{bcolors.OKCYAN}==============Got from VEH============{bcolors.ENDC}" )
+            # print(f"{bcolors.OKCYAN}Elapsed @ VEH Real: {realCavArray[6]:.2f}, {bcolors.OKBLUE}MPC got SimTime: {realCavArray[0]:.2f}.{bcolors.ENDC}" )
+            print(f"{bcolors.OKGREEN}Delta T RSPCSim-VEHReal: {(sim_time-realCavArray[6]):.2f}s{bcolors.ENDC}")
+            print(f"{bcolors.OKCYAN}Ego x,y: {realCavArray[4]:.2f}, {realCavArray[5]:.2f}.{bcolors.ENDC}" )
+            print(f"{bcolors.OKCYAN}Ego [GPS] s: -- , v:{realCavArray[2]:.2f}.{bcolors.ENDC}" )
+
             # Update Real CAV pos in simulation:::
-            # sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=realCavArray[3], dt=0.1) # careful: assign commmand or real sensed acc?
-            # traci.vehicle.moveToXY(vehID="nv2", edgeID="76146229#1", laneIndex="0", x=mache_pos[0], y=mache_pos[1])
-            # traci.vehicle.setSpeed("nv2", realCavArray[2])
-            sumo_sim_manager.update_realCAV_in_sumo(veh='nv2', spd=realCavArray[2])
+
+            # if local testingw/o gps:
+            sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=realCavArray[3], dt=0.1) # careful: assign commmand or real sensed acc?
+            
+            # if testing with gps and vehicle run
+            # sumo_sim_manager.update_realCAV_in_sumo(veh='nv2', 
+            #                                         spd=realCavArray[2], 
+            #                                         pos=[realCavArray[4],realCavArray[5]])
 
         
         # Log
@@ -161,10 +177,14 @@ if __name__=="__main__":
 
         # Sleep timing
         real_now = time.monotonic()
-        sleep_time = max(0, real_expected_time - real_now)  # Sleep only if ahead of real time
-        time.sleep(sleep_time)  # Sync with real-world time
-        print(f"{bcolors.OKCYAN}Elapsed::: Real: {real_now - real_start_time:.3f}s, Sim: {sim_time:.3f}s {bcolors.ENDC}")
-    
+        
+        if asyncSocket:
+            sleep_time = max(0, real_expected_time - real_now)  # Sleep only if ahead of real time
+            time.sleep(sleep_time)  # Sync with real-world time
+
+        # print(f"{bcolors.OKBLUE}Elapsed @ RSPC -> Real: {real_now - real_start_time:.3f}s, Sim: {sim_time:.3f}s {bcolors.ENDC}")
+        print(f"{bcolors.OKGREEN}Delta T RSPC[Sim-Real]: {((real_now - real_start_time)-sim_time):.2f}s{bcolors.ENDC}")
+   
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
     
     plt.figure(1)

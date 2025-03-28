@@ -54,23 +54,25 @@ class SumoSim():
             return stateVector
 
 
-    def update_realCAV_in_sumo(self, veh="nv2", spd=0.0, pos=None, dist=None):
+    def update_realCAV_in_sumo(self, veh="nv2", spd=0.0, pos=None, dist=None, verbose=False):
         try:
             if pos != None:
                 traci.vehicle.moveToXY(vehID=veh, edgeID="76146229#1", laneIndex="0", x=pos[0], y=pos[1])
             if spd != None:
                 traci.vehicle.setSpeed(vehID=veh, speed=spd)
-            print(f"{bcolors.ENDC}{veh}: Position {pos}, Speed {spd}{bcolors.ENDC}")
+            if verbose:
+                print(f"{bcolors.ENDC}{veh}: Position {pos}, Speed {spd}{bcolors.ENDC}")
         except traci.TraCIException as e:
             print(f"{bcolors.FAIL}Error updating vehicle:{veh}'s states  in sim{bcolors.ENDC}")
     
-    def update_CAV_in_sumo(self, veh="nv1", spd=0.0, pos=None, dist=None):
+    def update_CAV_in_sumo(self, veh="nv1", spd=0.0, pos=None, dist=None, verbose=False):
         try:
             if pos != None:
                 traci.vehicle.moveToXY(vehID=veh, edgeID="76146229#1", laneIndex="0", x=pos[0], y=pos[1])
             if spd != None:
                 traci.vehicle.setSpeed(vehID=veh, speed=spd)
-            print(f"{bcolors.ENDC}{veh}: Position {pos}, Speed {spd}{bcolors.ENDC}")
+            if verbose:
+                print(f"{bcolors.ENDC}{veh}: Position {pos}, Speed {spd}{bcolors.ENDC}")
         except traci.TraCIException as e:
             print(f"{bcolors.FAIL}Error updating vehicle:{veh}'s states  in sim{bcolors.ENDC}")
 
