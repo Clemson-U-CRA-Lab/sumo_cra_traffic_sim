@@ -91,7 +91,8 @@ if __name__=="__main__":
     spd_filename = parent_dir + "/speed_profile/US06_CMI_Urban_speed_profile.csv"
     leading_vehicle_speed_profile = driving_cycle_spd_profile_reader(spd_filename)
     
-    sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
+    # sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
+    sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/CMI/cmi.sumocfg")
     sumo_sim_manager.start_Sumo()
     
     # Initialize controller
