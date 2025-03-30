@@ -32,8 +32,8 @@ USING_PREVIEW = True # If using a direct preview of upcoming cycle
 
 # Traffic control setting
 USING_ONLINE_MPC = 0 # If using online MPC to track front vehicle
-USING_NEURAL_NETWORK = 0 # If using neural network controller to track front vehicle
-USING_LOOKUP_TABLE = 1 # If using lookup table to track front vehicle
+USING_NEURAL_NETWORK = 1 # If using neural network controller to track front vehicle
+USING_LOOKUP_TABLE = 0 # If using lookup table to track front vehicle
 USING_IDM = 0 # If using IDM to traffic front vehicle
 
 ### Error checking

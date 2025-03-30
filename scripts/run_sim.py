@@ -49,6 +49,12 @@ class sumo_sim():
         traci.simulationStep()
         self.vehID_list = traci.vehicle.getIDList()
         self.step += 1
+    
+    def assignTargetLane(self, vehicle_ID, edge_ID, pos):
+        traci.vehicle.moveTo(vehID=vehicle_ID, laneID=edge_ID)
+        
+    def assignLaneChangeMode(self, veh_id, mode):
+        traci.vehicle.setLaneChangeMode(vehID=veh_id, laneChangeMode=mode)
 
 
 if __name__=="__main__":
@@ -85,7 +91,7 @@ if __name__=="__main__":
     spd_filename = parent_dir + "/speed_profile/US06_CMI_Urban_speed_profile.csv"
     leading_vehicle_speed_profile = driving_cycle_spd_profile_reader(spd_filename)
     
-    sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/CMI/cmi.sumocfg")
+    sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
     sumo_sim_manager.start_Sumo()
     
     # Initialize controller
@@ -126,6 +132,7 @@ if __name__=="__main__":
         v_lead_id = np.argmin(np.abs([record_t - sim_t]))
         v_tgt_lead = front_v_t[v_lead_id] #+ 2.0 * (random.random() - 0.5)
         sumo_sim_manager.assignTargetSpeed(vehicle_ID="veh0", tgt_spd=v_tgt_lead)
+        sumo_sim_manager.assignLaneChangeMode(veh_id="veh0", mode=0)
         
         [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh0")
         [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh1")
@@ -165,6 +172,7 @@ if __name__=="__main__":
         
         # Assign the acceleration to ego vehicle
         sumo_sim_manager.assignAcceleration(vehicle_ID="veh1", tgt_acc=acc_1, dt=0.1)
+        sumo_sim_manager.assignLaneChangeMode(veh_id="veh1", mode=0)
         
         # data_logger(sim_t=sim_t, ego_a=acc_1, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
         #             pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename="EPA_SUMO_record_2.csv")
