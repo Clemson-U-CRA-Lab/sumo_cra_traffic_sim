@@ -76,7 +76,7 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
-        n_pred_steps = 51 # Number of stages the prediction is run for - 50 chosen here for example
+        n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
         for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
             # Logic to prevent overspeeding and reversing
             if pv_state[1] > v_max:
@@ -121,7 +121,7 @@ class PCC(_vehicle):
     def setCommand_SUMO(self, t, ego_s, ego_v, ego_a, pv_s, pv_v, pv_a, cycle_ss, cycle_vs, pv_ind=0):
         '''Set the control commands, for example desired acceleration and desired lane'''
         # Controller parameters
-        s_max = 5000 # Max position [m]
+        s_max = 15000 # Max position [m]
         v_max = self.v_max # Max velocity [m/s]
         
         ### Assign inputs struct properties

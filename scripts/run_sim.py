@@ -23,10 +23,10 @@ class sumo_sim():
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
         traci.start(sumoCmd)
     
-    def getVehicleStates(self, vehicle_ID):
+    def getVehicleStates(self, vehicle_ID, dist_offset):
         if vehicle_ID  in self.vehID_list:
             veh_spd_t = traci.vehicle.getSpeed(vehID=vehicle_ID)
-            veh_dist_t = traci.vehicle.getLanePosition(vehID=vehicle_ID)
+            veh_dist_t = traci.vehicle.getDistance(vehID=vehicle_ID) + dist_offset
             veh_lane_t = traci.vehicle.getLaneID(vehID=vehicle_ID)
             veh_acc_t = traci.vehicle.getAcceleration(vehID=vehicle_ID)
             return [veh_acc_t, veh_spd_t, veh_dist_t, veh_lane_t]
@@ -61,6 +61,7 @@ class sumo_sim():
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--logging_sim", help="whether to save the simulation data", action="store_true")
+    parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy'], help='Choose leading vehicles speed profile')
     args = parser.parse_args()
     
     veh_0_dist = []
@@ -93,7 +94,13 @@ if __name__=="__main__":
     
     current_dirname = os.path.dirname(__file__)
     parent_dir = os.path.abspath(os.path.join(current_dirname, os.pardir))
-    spd_filename = parent_dir + "/speed_profile/I85_nycccol.csv"
+    if args.leading_speed_profile == 'Hwy':
+        spd_filename = parent_dir + "/speed_profile/I85_hwycol.csv"
+    elif args.leading_speed_profile == 'Nyc':
+        spd_filename = parent_dir + "/speed_profile/I85_nycccol.csv"
+    else:
+        print('Unable to locate speed profile')
+        sys.exit(1)
     leading_vehicle_speed_profile = driving_cycle_spd_profile_reader(spd_filename)
     
     # sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
@@ -102,7 +109,7 @@ if __name__=="__main__":
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
-    nn_pt_filename = dirname + '/traffic_following_control_v3_256_best.pt'
+    nn_pt_filename = dirname + '/traffic_following_control.pt'
     table_filename = dirname + '/Utable_2states_MPC_terminal.npy'
     
     # Setup controller
@@ -142,9 +149,8 @@ if __name__=="__main__":
         sumo_sim_manager.assignTargetSpeed(vehicle_ID="veh0", tgt_spd=v_tgt_lead)
         sumo_sim_manager.assignLaneChangeMode(veh_id="veh0", mode=0)
         
-        [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh0")
-        [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh1")
-        
+        [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh0", dist_offset=100)
+        [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t, _] = sumo_sim_manager.getVehicleStates(vehicle_ID="veh1", dist_offset=90)
         # Estimate and record power consumption
         P_1_list.append(engine_power_estimation(veh_1_spd_t, veh_1_acc_t))
         
