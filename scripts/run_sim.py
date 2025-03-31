@@ -2,6 +2,7 @@
 
 import os
 import sys
+import argparse
 import traci
 import traci.constants as tc
 import matplotlib.pyplot as plt
@@ -58,6 +59,10 @@ class sumo_sim():
 
 
 if __name__=="__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--logging_sim", help="whether to save the simulation data", action="store_true")
+    args = parser.parse_args()
+    
     veh_0_dist = []
     veh_0_spd = []
     veh_0_lane = []
@@ -88,11 +93,11 @@ if __name__=="__main__":
     
     current_dirname = os.path.dirname(__file__)
     parent_dir = os.path.abspath(os.path.join(current_dirname, os.pardir))
-    spd_filename = parent_dir + "/speed_profile/US06_CMI_Urban_speed_profile.csv"
+    spd_filename = parent_dir + "/speed_profile/I85_nycccol.csv"
     leading_vehicle_speed_profile = driving_cycle_spd_profile_reader(spd_filename)
     
     # sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
-    sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/CMI/cmi.sumocfg")
+    sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
     sumo_sim_manager.start_Sumo()
     
     # Initialize controller
@@ -125,7 +130,9 @@ if __name__=="__main__":
     front_v_t = np.array(leading_vehicle_speed_profile[:, 1])
     front_s_t = np.array(leading_vehicle_speed_profile[:, 3])
     
-    while sumo_sim_manager.step < 800:
+    traci.gui.trackVehicle("View #0", "veh1")
+    traci.gui.setZoom("View #0", 10000)
+    while sumo_sim_manager.step < len(record_t):
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
@@ -175,8 +182,9 @@ if __name__=="__main__":
         sumo_sim_manager.assignAcceleration(vehicle_ID="veh1", tgt_acc=acc_1, dt=0.1)
         sumo_sim_manager.assignLaneChangeMode(veh_id="veh1", mode=0)
         
-        # data_logger(sim_t=sim_t, ego_a=acc_1, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
-        #             pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename="EPA_SUMO_record_2.csv")
+        if args.logging_sim:
+            data_logger(sim_t=sim_t, ego_a=acc_1, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
+                        pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename="EPA_SUMO_nyc.csv")
         
         veh_0_acc.append(veh_0_acc_t)
         veh_0_spd.append(veh_0_spd_t)
