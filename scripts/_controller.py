@@ -13,6 +13,9 @@ from utils import *
 from _sensor import *
 from _agents import *
 
+def TTCi_estimate(ego_v, front_v, front_s):
+    ttc_i = (ego_v - front_v) / front_s
+    return ttc_i
 class IDM():
     def __init__(self, a, b, s0, v0, T):
         self.a = a
@@ -25,8 +28,8 @@ class IDM():
         s_safe = self.s0 + ego_v * self.T + front_v * \
             (ego_v - front_v) / (2 * (self.a * self.b)**0.5)
         acc = self.a * (1 - (ego_v / self.v0) ** 4 -
-                        (s_safe / (front_s - ego_s - 5)) ** 2)
-        acc = np.clip(acc, -3, 3)
+                        (s_safe / (front_s - ego_s - 7)) ** 2)
+        acc = np.clip(acc, -9, 3)
         return acc
     
 class PCC_MPC_controller():
@@ -57,10 +60,10 @@ class NN_controller():
     def __init__(self, nn_pt_file):
         self.nn_controller = Model(h1=256, h2=256)
         self.nn_controller.load_state_dict(torch.load(nn_pt_file))
-        self.IDM_brake = IDM(a=4, b=6, s0=3, v0=20, T=1)
+        self.IDM_brake = IDM(a=4, b=7, s0=5, v0=20, T=4)
     
     def step_forward(self, s_vt, pv_vt, s_st, pv_st):
-        ttc_i = TTCi_estimate(ego_v=s_vt, front_v=pv_vt, front_s=pv_st - s_vt)
+        ttc_i = TTCi_estimate(ego_v=s_vt, front_v=pv_vt, front_s=pv_st - s_st)
         nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st])
         nn_input = torch.FloatTensor(nn_input_vec.T)
         
@@ -73,8 +76,11 @@ class NN_controller():
         s_a_IDM = self.IDM_brake.IDM_acceleration(front_v=pv_vt, ego_v=s_vt, front_s=pv_st, ego_s=s_st)
         
         # Check the if IDM braking is needed
-        IDM_w = ttc_i > 10.0
-        ego_a_tgt = (IDM_w) * s_a_IDM + (~IDM_w) * s_a_nn
+        IDM_w = ttc_i > 0.25 or pv_st - s_st < 10
+        if IDM_w:
+            ego_a_tgt = s_a_IDM
+        else:
+            ego_a_tgt = s_a_nn
         
         # Return control value
         return ego_a_tgt

@@ -121,7 +121,7 @@ class PCC(_vehicle):
     def setCommand_SUMO(self, t, ego_s, ego_v, ego_a, pv_s, pv_v, pv_a, cycle_ss, cycle_vs, pv_ind=0):
         '''Set the control commands, for example desired acceleration and desired lane'''
         # Controller parameters
-        s_max = 15000 # Max position [m]
+        s_max = 50000 # Max position [m]
         v_max = self.v_max # Max velocity [m/s]
         
         ### Assign inputs struct properties

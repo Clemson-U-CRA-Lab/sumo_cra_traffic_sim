@@ -139,7 +139,9 @@ if __name__=="__main__":
     
     traci.gui.trackVehicle("View #0", "veh1")
     traci.gui.setZoom("View #0", 10000)
-    while sumo_sim_manager.step < len(record_t):
+    traci.vehicle.setSpeedMode(vehID="veh1", speedMode=96)
+    
+    while sumo_sim_manager.step < len(record_t) + 100:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
@@ -190,7 +192,7 @@ if __name__=="__main__":
         
         if args.logging_sim:
             data_logger(sim_t=sim_t, ego_a=acc_1, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
-                        pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename="EPA_SUMO_nyc.csv")
+                        pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename= args.leading_speed_profile + "_" + controller_name + ".csv")
         
         veh_0_acc.append(veh_0_acc_t)
         veh_0_spd.append(veh_0_spd_t)
@@ -213,6 +215,7 @@ if __name__=="__main__":
     E = E_1
     
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
+    print('Runtime standard deviation is: ', str(round(np.std(runtime_record) * 1000, 4)), 'ms')
     print('Energy consumption for this traffic section is: ', str(round(E / 1000, 3)) + 'kW')
     
     plt.figure(1)

@@ -2,6 +2,7 @@ import math
 import csv
 import numpy as np
 import scipy
+from _controller import IDM
 
 class IDM():
     def __init__(self, a, b, s0, v0, T):
@@ -16,7 +17,7 @@ class IDM():
             (ego_v - front_v) / (2 * (self.a * self.b)**0.5)
         acc = self.a * (1 - (ego_v / self.v0) ** 4 -
                         (s_safe / (front_s - ego_s - 5)) ** 2)
-        acc = np.clip(acc, -3, 3)
+        acc = np.clip(acc, -6, 4)
         return acc
 
 def delta_yaw_correction(delta_yaw):
@@ -144,7 +145,19 @@ def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
                                                    pv_s=veh_0_dist_t, pv_v=veh_0_spd_t, pv_a=veh_0_acc_t, cycle_ss=cycle_ss,
                                                    cycle_vs=cycle_vs)
     
-    return [acc_1]
+    # Modify emergency brake
+    IDM_controller = IDM(a=4, b=6, s0=7, v0=20, T=2)
+    a_IDM = IDM_controller.IDM_acceleration(front_v=veh_0_spd_t, ego_v=veh_1_spd_t, front_s=veh_0_dist_t, ego_s=veh_1_dist_t)
+    ttc_i = TTCi_estimate(ego_v=veh_1_spd_t, front_v=veh_0_spd_t, front_s=veh_0_dist_t - veh_1_dist_t)
+    
+    IDM_w = ttc_i > 0.25 or veh_0_dist_t - veh_1_dist_t < 7
+    
+    if IDM_w:
+        ego_a_tgt = a_IDM
+    else:
+        ego_a_tgt = acc_1
+        
+    return [ego_a_tgt]
 
 def engine_power_estimation(ego_v, ego_a):
     m = 2218 # Vehicle weights
