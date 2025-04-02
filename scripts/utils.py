@@ -2,6 +2,7 @@ import math
 import csv
 import numpy as np
 import scipy
+import traci
 from _controller import IDM
 
 class IDM():
@@ -19,6 +20,33 @@ class IDM():
                         (s_safe / (front_s - ego_s - 5)) ** 2)
         acc = np.clip(acc, -6, 4)
         return acc
+
+class SUMO_vehicles():
+    def __init__(self, vehicle_ID, init_s, init_lane, route_ID):
+        self.ID = vehicle_ID
+        self.v = 0.0
+        self.a = 0.0
+        self.s = init_s
+        self.init_dist = init_s
+        self.lane_ID = init_lane
+        
+        traci.vehicle.add(vehicle_ID, route_ID, typeID = 'car', departLane=str(self.lane_ID), departPos=self.s)
+    
+    def getVehicleStates(self):
+        veh_v_t = traci.vehicle.getSpeed(vehID=self.ID)
+        veh_s_t = traci.vehicle.getDistance(vehID=self.ID) + self.init_dist
+        veh_a_t = traci.vehicle.getAcceleration(vehID=self.ID)
+        
+        return [veh_a_t, veh_v_t, veh_s_t]
+    
+    def assignTargetSpeed(self, tgt_spd):
+        traci.vehicle.setSpeed(vehID=self.ID, speed=tgt_spd)
+    
+    def assignTargetAcceleration(self, tgt_acc):
+        traci.vehicle.setAcceleration(vehID=self.ID, acceleration=tgt_acc, duration=0.1)
+    
+    def assignLaneChangeMode(self, mode):
+        traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=mode)
 
 def delta_yaw_correction(delta_yaw):
     if delta_yaw > math.pi:

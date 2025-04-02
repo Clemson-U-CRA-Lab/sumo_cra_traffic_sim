@@ -16,9 +16,15 @@ class sumo_sim():
         self.sumoBinary = "/usr/bin/sumo-gui"
         self.sumoconfig = sumo_config_name
         self.vehID_list = []
-        self.num_veh = len(self.vehID_list)
+        self.num_veh = 0
         self.step = 0
-        
+    
+    def init_vehicles(self, num_vehicle):
+        self.num_veh = num_vehicle
+        self.sumo_veh = [None]*num_vehicle
+        for i in range(2, self.num_veh):
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 100 - 10*i, init_lane=1, route_ID="route1")
+    
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
         traci.start(sumoCmd)
@@ -106,6 +112,7 @@ if __name__=="__main__":
     # sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
     sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
     sumo_sim_manager.start_Sumo()
+    sumo_sim_manager.init_vehicles(num_vehicle=8)
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
