@@ -22,7 +22,7 @@ class IDM():
         return acc
 
 class SUMO_vehicles():
-    def __init__(self, vehicle_ID, init_s, init_lane, route_ID):
+    def __init__(self, vehicle_ID, init_s, init_lane, route_ID, lane_change_mode):
         self.ID = vehicle_ID
         self.v = 0.0
         self.a = 0.0
@@ -30,7 +30,9 @@ class SUMO_vehicles():
         self.init_dist = init_s
         self.lane_ID = init_lane
         
-        traci.vehicle.add(vehicle_ID, route_ID, typeID = 'car', departLane=str(self.lane_ID), departPos=self.s)
+        traci.vehicle.add(self.ID, route_ID, typeID = 'car', departLane=str(self.lane_ID), departPos=self.s)
+        traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=lane_change_mode)
+        traci.vehicle.setSpeedMode(vehID=self.ID, speedMode=96)
     
     def getVehicleStates(self):
         veh_v_t = traci.vehicle.getSpeed(vehID=self.ID)
@@ -157,35 +159,12 @@ def TTCi_estimate(ego_v, front_v, front_s):
 
 def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
                                     veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
-                                    sim_t, record_t, front_v_t, online_MPC_control):
-    
-    # Find leading vehicle's driving cycle
-    cycle_vs = np.empty(32)
-    cycle_vs.fill(np.nan)
-    
-    for i in range(32):
-        t_id = np.argmin(np.abs([record_t - (i * 0.1 + sim_t)]))
-        cycle_vs[i] = front_v_t[t_id]
-    
-    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=0.1) + veh_0_dist_t
-    
-    veh_1_pred_s, veh_1_pred_v, acc_1 = online_MPC_control.svs.setCommand_SUMO(t = sim_t, ego_s=veh_1_dist_t, ego_v=veh_1_spd_t, ego_a=veh_1_acc_t,
-                                                   pv_s=veh_0_dist_t, pv_v=veh_0_spd_t, pv_a=veh_0_acc_t, cycle_ss=cycle_ss,
-                                                   cycle_vs=cycle_vs)
-    
-    # Modify emergency brake
-    IDM_controller = IDM(a=4, b=6, s0=7, v0=20, T=2)
-    a_IDM = IDM_controller.IDM_acceleration(front_v=veh_0_spd_t, ego_v=veh_1_spd_t, front_s=veh_0_dist_t, ego_s=veh_1_dist_t)
-    ttc_i = TTCi_estimate(ego_v=veh_1_spd_t, front_v=veh_0_spd_t, front_s=veh_0_dist_t - veh_1_dist_t)
-    
-    IDM_w = ttc_i > 0.25 or veh_0_dist_t - veh_1_dist_t < 7
-    
-    if IDM_w:
-        ego_a_tgt = a_IDM
-    else:
-        ego_a_tgt = acc_1
+                                    sim_t, online_MPC_control):
         
-    return [ego_a_tgt]
+    veh_1_pred_s, veh_1_pred_v, a_MPC = online_MPC_control.svs.setCommand_SUMO(t = sim_t, ego_s=veh_1_dist_t, ego_v=veh_1_spd_t, ego_a=veh_1_acc_t,
+                                                   pv_s=veh_0_dist_t, pv_v=veh_0_spd_t, pv_a=veh_0_acc_t)
+        
+    return [a_MPC]
 
 def engine_power_estimation(ego_v, ego_a):
     m = 2218 # Vehicle weights

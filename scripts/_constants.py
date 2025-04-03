@@ -30,12 +30,6 @@ SENSOR_RANGE = 100 # [m] Reliable sensor detection range
 USING_PRED = False # If using prediction provided from cycle
 USING_PREVIEW = True # If using a direct preview of upcoming cycle
 
-# Traffic control setting
-USING_ONLINE_MPC = 1 # If using online MPC to track front vehicle
-USING_NEURAL_NETWORK = 0 # If using neural network controller to track front vehicle
-USING_LOOKUP_TABLE = 0 # If using lookup table to track front vehicle
-USING_IDM = 0 # If using IDM to traffic front vehicle
-
 ### Error checking
 assert not (USING_PRED and USING_PREVIEW), 'Cannot use both PRED and PREVIEW settings.'
 

@@ -59,6 +59,7 @@ class Model(nn.Module):
 class NN_controller():
     def __init__(self, nn_pt_file):
         self.nn_controller = Model(h1=256, h2=256)
+        self.nn_controller.eval()
         self.nn_controller.load_state_dict(torch.load(nn_pt_file))
         self.IDM_brake = IDM(a=4, b=7, s0=5, v0=20, T=4)
     
@@ -76,13 +77,10 @@ class NN_controller():
         s_a_IDM = self.IDM_brake.IDM_acceleration(front_v=pv_vt, ego_v=s_vt, front_s=pv_st, ego_s=s_st)
         
         # Check the if IDM braking is needed
-        IDM_w = ttc_i > 0.25 or pv_st - s_st < 10
-        if IDM_w:
-            ego_a_tgt = s_a_IDM
-        else:
-            ego_a_tgt = s_a_nn
+        IDM_w = (ttc_i > 0.25) + (pv_st - s_st < 10)
         
-        # Return control value
+        ego_a_tgt = IDM_w * s_a_IDM + (1 - IDM_w) * s_a_nn
+        
         return ego_a_tgt
     
 class lookup_table_controller():

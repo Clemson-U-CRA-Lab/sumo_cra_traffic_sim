@@ -67,7 +67,7 @@ class PCC(_vehicle):
         self.api = cpp_api(dirname + '/' + libraryname)
 
     def predAcc(self, t, pv_state, v_max):
-        dt_pred = 0.20 # Time stepsize between prediction stages [s]
+        dt_pred = 0.50 # Time stepsize between prediction stages [s]
         t_pred = t # [s]
         
         k = 0 # First index is current PV states
@@ -76,7 +76,7 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
-        n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
+        n_pred_steps = 30 # Number of stages the prediction is run for - 50 chosen here for example
         for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
             # Logic to prevent overspeeding and reversing
             if pv_state[1] > v_max:
@@ -118,7 +118,7 @@ class PCC(_vehicle):
             
             self.api.inputs_p.contents.time_pred[k] = t_pred
     
-    def setCommand_SUMO(self, t, ego_s, ego_v, ego_a, pv_s, pv_v, pv_a, cycle_ss, cycle_vs, pv_ind=0):
+    def setCommand_SUMO(self, t, ego_s, ego_v, ego_a, pv_s, pv_v, pv_a, pv_ind=0):
         '''Set the control commands, for example desired acceleration and desired lane'''
         # Controller parameters
         s_max = 50000 # Max position [m]
@@ -129,7 +129,7 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.t = t # Dereference pointer with .contents method
         
         # Ego vehicle states
-        self.api.inputs_p.contents.ego_state[0] = ego_s # self.s + self.len # MPC wants the Frenet front bumper position - the simulation was written so that .s is the back bumper position for each simulated vehicle so add vehicle len to get front bumper
+        self.api.inputs_p.contents.ego_state[0] = ego_s + 5.0 # self.s + self.len # MPC wants the Frenet front bumper position - the simulation was written so that .s is the back bumper position for each simulated vehicle so add vehicle len to get front bumper
         self.api.inputs_p.contents.ego_state[1] = ego_v # self.v # Frenet forward velocity
         self.api.inputs_p.contents.ego_state[2] = ego_a # self.a # Frenet forward acceleration - use previous Ua command if unknown/very inaccurate ego accel
         

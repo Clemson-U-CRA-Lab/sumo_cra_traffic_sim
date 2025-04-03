@@ -17,13 +17,4 @@
     <!-- Define routes -->
     <route id="route1" edges="1342520806 37689461 172234442 1342520808 1342520807#0 1342520807#1 1342522873"/>
     <!-- <route id="route2" edges="-76146229#1"/> -->
-
-    <!-- Assign vehicles to routes -->
-    <!-- <vehicle id="veh0" type="car" route="route2" depart="0" departPos="30"/>
-    <vehicle id="veh1" type="car" route="route2" depart="0" departPos="21"/> -->
-    <vehicle id="veh0" type="car" route="route1" depart="0" departPos="100" departLane="1"/>
-    <vehicle id="veh1" type="car" route="route1" depart="0" departPos="90" departLane="1"/>
-    <!-- <vehicle id="veh4" type="car" route="route1" depart="3"/>
-    <vehicle id="veh2" type="car" route="route2" depart="5"/>
-    <vehicle id="veh3" type="car" route="route2" depart="8"/> -->
 </routes>
