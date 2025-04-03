@@ -83,6 +83,16 @@ if __name__=="__main__":
     
     sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/CMI/cmi.sumocfg")
     sumo_sim_manager.start_Sumo()
+
+    # traci.vehicle.setSpeed("veh2", 0.0)
+    # traci.vehicle.setSpeed("veh1", 0.0)
+    # traci.vehicle.setSpeed("veh0", 0.0)
+
+    traci.vehicle.setSpeedMode("veh1", 96)
+    traci.vehicle.setSpeedMode("veh2", 96)
+    traci.vehicle.setSpeedMode("veh0", 96)
+    traci.vehicle.setSpeedMode("veh3", 96)
+
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
@@ -129,6 +139,7 @@ if __name__=="__main__":
         acc_2 = acc_traffic_step_t[1]
         acc_3 = acc_traffic_step_t[2]
         
+
         # Assign the acceleration to ego vehicle
         sumo_sim_manager.assignAcceleration(vehicle_ID="veh1", tgt_acc=acc_1, dt=0.1)
         sumo_sim_manager.assignAcceleration(vehicle_ID="veh2", tgt_acc=acc_2, dt=0.1)

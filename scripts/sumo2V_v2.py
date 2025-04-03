@@ -53,6 +53,9 @@ if __name__=="__main__":
     veh_3_lane = []
     veh_3_acc = []
     
+    mache_acc_cmd = []
+    nv1_acc_cmd = []
+
     veh_sim_t = []
     
     runtime_record = []
@@ -69,8 +72,17 @@ if __name__=="__main__":
     # Init SUMO sim
     sumo_sim_manager = SumoSim(sumo_config_name=parent_dir + "/sumo/v2x/v2x.sumocfg")
     sumo_sim_manager.start_Sumo(gui=True)
-    traci.vehicle.setSpeed("nv2", 0.0)
 
+    traci.vehicle.setSpeed("nv2", 0.0)
+    traci.vehicle.setSpeed("nv1", 0.0)
+    traci.vehicle.setSpeed("nv0", 0.0)
+    # traci.vehicle.setSpeedMode("nv1", 0)
+    # traci.vehicle.setSpeedMode("nv2", 0)
+    traci.vehicle.setSpeedMode("nv1", 96)
+    traci.vehicle.setSpeedMode("nv2", 96)
+
+    traci.gui.trackVehicle("View #0", "nv2")
+    traci.gui.setZoom("View #0", 500)
     
     # Inti and Setup controller
     if USING_ONLINE_MPC:
@@ -83,7 +95,7 @@ if __name__=="__main__":
     # Get the real-world start time
     real_start_time = time.monotonic()  
     sim_start_time = 0  # SUMO's starting simulation time
-    while sumo_sim_manager.step < 60/SIM_STEP:
+    while sumo_sim_manager.step < END_TIME/SIM_STEP:
         sim_time = traci.simulation.getTime()  # Get SUMO's current simulation time
         # Calculate expected real-time equivalent for SUMO's sim_time
         real_expected_time = real_start_time + (sim_time - sim_start_time)
@@ -128,6 +140,7 @@ if __name__=="__main__":
                             ] + [veh_states_matrix[1][3]]*32 + [0.0]*32 # front's s, front's v
         else:
             sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc["nv1"], dt=0.1)
+            # sumo_sim_manager.update_CAV_in_sumo(veh='nv1', spd=0.0, pos=[0,0])
             # sim_time, ego_s, ego_v, ego_a  front_s, front_v, front_a, ...
             lead_nv_array = [sim_time, 
                             veh_states_matrix[2][3], veh_states_matrix[2][2], veh_states_matrix[2][1], # ego
@@ -136,9 +149,7 @@ if __name__=="__main__":
             
         # Send NV states to realCAV
         sockInt.send_sim_info(lead_nv_array)
-        print(f"Send Front info: {lead_nv_array[0], lead_nv_array[1:4], lead_nv_array[4:7]}")
-        # print(f"{bcolors.OKBLUE} {preds_s['nv2']} {bcolors.ENDC}")
-        # print(f"{bcolors.OKCYAN} {preds_v['nv2']} {bcolors.ENDC}")
+        # print(f"Send Front info: {lead_nv_array[0], lead_nv_array[1:4], lead_nv_array[4:7]}")
 
         # Recv realCAV info and updat ereal CAV in sim
         realCavArray = sockInt.recv_veh_info()
@@ -152,12 +163,14 @@ if __name__=="__main__":
             # Update Real CAV pos in simulation:::
 
             # if local testingw/o gps:
-            sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=realCavArray[3], dt=0.1) # careful: assign commmand or real sensed acc?
+            sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=realCavArray[3], dt=SIM_STEP) # careful: assign commmand or real sensed acc?
             
             # if testing with gps and vehicle run
-            # sumo_sim_manager.update_realCAV_in_sumo(veh='nv2', 
-            #                                         spd=realCavArray[2], 
-            #                                         pos=[realCavArray[4],realCavArray[5]])
+            # sumo_sim_manager.update_CAV_in_sumo(veh='nv2', 
+                                                    # spd=realCavArray[2],
+                                                    # dist=realCavArray[1],
+                                                    # pos=[realCavArray[4],realCavArray[5]]
+                                                    # )
 
         
         # Log
@@ -165,10 +178,12 @@ if __name__=="__main__":
         veh_0_spd.append(veh_states_matrix[0][2])
         veh_0_dist.append(veh_states_matrix[0][3])
         
+        nv1_acc_cmd.append(acc["nv1"])
         veh_1_acc.append(veh_states_matrix[1][1])
         veh_1_spd.append(veh_states_matrix[1][2])
         veh_1_dist.append(veh_states_matrix[1][3])
 
+        mache_acc_cmd.append(acc["nv2"])
         veh_2_acc.append(veh_states_matrix[2][1])
         veh_2_spd.append(veh_states_matrix[2][2])
         veh_2_dist.append(veh_states_matrix[2][3])
@@ -177,7 +192,6 @@ if __name__=="__main__":
 
         # Sleep timing
         real_now = time.monotonic()
-        
         if asyncSocket:
             sleep_time = max(0, real_expected_time - real_now)  # Sleep only if ahead of real time
             time.sleep(sleep_time)  # Sync with real-world time
@@ -189,24 +203,35 @@ if __name__=="__main__":
     
     plt.figure(1)
     
-    plt.subplot(2,1,1)
+    plt.subplot(3,1,1)
     plt.plot(veh_sim_t, veh_0_dist)
     plt.plot(veh_sim_t, veh_1_dist)
     plt.plot(veh_sim_t, veh_2_dist)
     # plt.plot(veh_sim_t, veh_3_dist)
     plt.xlabel('Time [s]')
     plt.ylabel('Distance from route edge [m]')
-    plt.legend(['Leading Vehicle', 'Vehicle 1', 'MachE'])
+    plt.legend(['Leading Vehicle', 'Vehicle 0', 'mache'])
     
-    plt.subplot(2,1,2)
+    plt.subplot(3,1,2)
     plt.plot(veh_sim_t, veh_0_spd)
     plt.plot(veh_sim_t, veh_1_spd)
     plt.plot(veh_sim_t, veh_2_spd)
     # plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Speed [m/s]')
-    plt.legend(['Leading Vehicle', 'Vehicle 1', 'MachE'])
-    
+    plt.legend(['Leading Vehicle', 'Vehicle 0', 'mache'])
+
+    plt.subplot(3,1,3)
+    plt.plot(veh_sim_t, veh_0_acc, 'k')
+    plt.plot(veh_sim_t, veh_1_acc,'b')
+    plt.plot(veh_sim_t, veh_2_acc, 'g')
+    plt.plot(veh_sim_t, nv1_acc_cmd, "b--")
+    plt.plot(veh_sim_t, mache_acc_cmd, 'g--')
+    # plt.plot(veh_sim_t, veh_3_spd)
+    plt.xlabel('Time [s]')
+    plt.ylabel('Acc [m/s^2]')
+    plt.legend(['Leading Vehicle', 'nv1', 'mache','nv1_accCmd', 'mache_accCmd'])
+
     plt.show()
     
     traci.close(False)

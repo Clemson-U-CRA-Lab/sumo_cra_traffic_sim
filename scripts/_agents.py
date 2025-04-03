@@ -16,6 +16,9 @@ from _constants import *
 from _sensor import *
 from _cppwrapper import cpp_api
 
+from utils import bcolors
+from x2v_constants import *
+
 class _vehicle:
     '''Virtual vehicle super class'''
     id = 1
@@ -66,8 +69,8 @@ class PCC(_vehicle):
             
         self.api = cpp_api(dirname + '/' + libraryname)
 
-    def predAcc(self, t, pv_state, v_max):
-        dt_pred = 0.20 # Time stepsize between prediction stages [s]
+    def predAcc(self, t, pv_state, v_max, n_pred_steps=50):
+        dt_pred = 0.5 #0.2 # Time stepsize between prediction stages [s]
         t_pred = t # [s]
         
         k = 0 # First index is current PV states
@@ -76,7 +79,7 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
-        n_pred_steps = 51 # Number of stages the prediction is run for - 50 chosen here for example
+        # n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
         for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
             # Logic to prevent overspeeding and reversing
             if pv_state[1] > v_max:
@@ -97,8 +100,8 @@ class PCC(_vehicle):
             pv_state[0] = self.api.inputs_p.contents.pos_pred[k]
             pv_state[1] = self.api.inputs_p.contents.vel_pred[k]
 
-    def setPred(self, t, pv_state, cycle_ss, cycle_vs, n_pred_steps=50):
-        dt_pred = 0.10 # Time stepsize between prediction stages [s]
+    def setPred(self, t, pv_state, cycle_ss, cycle_vs, cycle_dt, n_pred_steps):
+        dt_pred = cycle_dt # 0.1 # Time stepsize between prediction stages [s]
         t_pred = t # [s]
 
         k = 0 # First index is current PV states
@@ -107,18 +110,26 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
-        n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
+        # n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
         for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
             # Include prediction from external module
             t_pred += dt_pred
-
             self.api.inputs_p.contents.acc_pred[k] = pv_state[2]
             self.api.inputs_p.contents.vel_pred[k] = cycle_vs[k-1]
             self.api.inputs_p.contents.pos_pred[k] = cycle_ss[k-1]
             
             self.api.inputs_p.contents.time_pred[k] = t_pred
+        
+        # print(f"Pred T: {[f'{x:.2f}' for x in self.api.inputs_p.contents.time_pred[0:n_pred_steps]]}")
+        # print(f"Pred S : {[f'{x:.2f}' for x in self.api.inputs_p.contents.pos_pred[0:n_pred_steps]]}")
     
-    def setCommand_SUMO(self, t, ego_s, ego_v, ego_a, pv_s, pv_v, pv_a, cycle_ss, cycle_vs, pv_ind=0):
+    def setCommand_SUMO(self, t, 
+                        ego_s, ego_v, ego_a, 
+                        pv_s, pv_v, pv_a, 
+                        cycle_ss, cycle_vs, cycle_dt, 
+                        n_refs = 32,
+                        preview=False,
+                        pv_ind=0):
         '''Set the control commands, for example desired acceleration and desired lane'''
         # Controller parameters
         s_max = 5000 # Max position [m]
@@ -155,7 +166,10 @@ class PCC(_vehicle):
             self.api.inputs_p.contents.time_pred[k] = nan
 
         # Predict PV motion and then write to inputs
-        self.setPred(t, pv_state, cycle_ss, cycle_vs)
+        if preview:
+            self.setPred(t, pv_state, cycle_ss, cycle_vs, cycle_dt=cycle_dt, n_pred_steps=n_refs) 
+        else:
+            self.predAcc(t=t, pv_state=pv_state, v_max=20, n_pred_steps=n_refs) # zero order hold acc
         
         # Ego vehicle state constraints
         self.api.inputs_p.contents.pos_max = s_max
@@ -171,12 +185,15 @@ class PCC(_vehicle):
 
         state_trajectory = self.api.outputs_p.contents.state_trajectory
         # control_trajectory = self.api.outputs_p.contents.control_trajectory
-        # time_trajectory = self.api.outputs_p.contents.time_trajectory
-        # slacks = self.api.outputs_p.contents.slacks
+        time_trajectory = self.api.outputs_p.contents.time_trajectory
+        slacks = self.api.outputs_p.contents.slacks
         # reference = self.api.outputs_p.contents.reference
         # constraint = self.api.outputs_p.contents.constraint
         # cost = self.api.outputs_p.contents.cost
         self.exitflag = self.api.outputs_p.contents.exitflag
+        # print("Solver Status Reurned: ", self.exitflag)
+        if self.exitflag != 1:
+            print(f"{bcolors.FAIL_RED}Solver Returned {self.exitflag}, {[f'{x:.2f}' for x in slacks]}{bcolors.ENDC}")
 
         ### Log the inputs to the MPC inputs_p.contents here
         ### Log the outputs from the MPC outputs_p.contents here
@@ -189,9 +206,50 @@ class PCC(_vehicle):
 
         pos_traj = state_trajectory[0::n_states] # Pos state starts at index 0
         vel_traj = state_trajectory[1::n_states] # Vel state starts at index 1
-        # acc_traj = state_trajectory[2::n_states] # Acc state starts at index 2
+        # acc_traj = state_trajectory[2::n_states] # Acc state starts at index 2    
+
+        # # Slack variables
+        # # We can monitor the slack variables to see if the MPC feels safe in the current situation
+        # # Slack is the margin that the solver reduced the constraint so that a feasible solution could be found
+        # max_s_slack = slacks[0] # s + e \leq s_max
+        # min_v_slack = slacks[1] # v_min \leq v + e
+        # max_v_slack = slacks[2] # v + e \leq v_max
+        # gap_viol_slack = slacks[3] # (s+vTh) + e \leq P(s_pv)(confidence) - d_min
         
-        return pos_traj, vel_traj, acc_des
+
+        # # These slack variables will naturally have some non-zero value occasionally to help with solution smoothness
+        # # Let's monitor and if the MPC feels it cannot stop the vehicle before reaching the PV, a warning to the safety drivers goes off like so:
+        # SAFETY_MARGIN = 2 # "Allowable" margin before flashing a warning [m] We should discuss on what to set this value as
+        # if gap_viol_slack > SAFETY_MARGIN:
+        #     print("MPC DETECTING GAP VIOLATIONS ARE OCCURING")
+
+        # # Exitflags
+        # # Exitflag is the MPC optimizer exitflag that indicates the quality of the solution
+        # # Their codes can be found in longitudinal_mpc_types.h:
+        # # enum class flags
+        # #     : int32_T {
+        # #     SOLVED = 1,                          /* Default value */
+        # #     MAX_ITER = 0,
+        # #     PRIMAL_INFEASIBLE = -2,
+        # #     DUAL_INFEASIBLE = -3,
+        # #     NONCONVEX_DETECTED = -6,
+        # #     MI_SOLVED = 11,
+        # #     MI_PRIMAL_INFEASIBLE = 13,
+        # #     MI_DUAL_INFEASIBLE = 15,
+        # #     MI_MAX_ITER = 12,
+        # #     MI_MAX_ITER_UNSOLVED = 14,
+        # #     MI_INTEGER_INFEASIBLE = 17,
+        # #     UNSOLVED = -1,
+        # #     EMPTY = -1235,
+        # #     UNKNOWN = -1234
+        # #     };
+        
+        # # Typically we want to monitor that the solution is returning SOLVED
+        # # Max iter means that the active set algorithm maximum number of iterations set before solution converging was hit
+        # # Primal infeasible means that the control constraints are not "being met well"
+
+        
+        return pos_traj, vel_traj, acc_des, time_trajectory
 
     def setCommand(self, nvs, t):
         '''Set the control commands, for example desired acceleration and desired lane'''

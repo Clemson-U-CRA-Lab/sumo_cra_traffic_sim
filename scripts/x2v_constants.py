@@ -10,9 +10,16 @@ TIMEOUT = 5  # Timeout
 MESSAGE_BYTE_LENGTH = BYTE_SIZE*VEH_ARRAY_SIZE
 
 # same machine testing only
-# SERVER_IP = 'localhost'
-# SERVER_PORT = 7005
+SERVER_IP = 'localhost'
+SERVER_PORT = 7005
 
+# for direct to nuvo
+# SERVER_IP = 'fe80::71c1:df07:f5d:c1f0' 
+# SERVER_PORT = 7003
 
 # STEP LENGTH: Sumo Time and rospy time:
 SIM_STEP = 0.05
+END_TIME = 60.0
+
+MPC_DT = 0.5
+MPC_REF_STAGES = 32

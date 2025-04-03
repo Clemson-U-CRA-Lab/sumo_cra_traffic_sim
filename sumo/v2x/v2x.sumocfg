@@ -1,14 +1,18 @@
 <configuration>
     <input>
-        <net-file value="map1.net.xml"/>
-        <route-files value="map.rou.xml"/>
+        <net-file value="map1.net.xml" />
+        <route-files value="map.rou.xml" />
     </input>
     <time>
-        <begin value="0"/>
-        <end value="60"/>
-        <step-length value="0.05"/>
+        <begin value="0" />
+        <end value="60" />
+        <step-length value="0.05" />
     </time>
     <gui_only>
-		<start value="true"/>
+		<start value="true" />
 	</gui_only>
+    <processing>
+        <collision.mingap-factor value="0" />
+        <collision.action value="warn" />
+    </processing>
 </configuration>

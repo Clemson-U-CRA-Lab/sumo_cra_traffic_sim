@@ -11,4 +11,8 @@
     <gui_only>
 		<start value="true"/>
 	</gui_only>
+    <processing>
+        <collision.mingap-factor value="0"/>
+        <collision.action value="warn"/>
+    </processing>
 </configuration>

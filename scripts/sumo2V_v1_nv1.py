@@ -72,6 +72,16 @@ if __name__=="__main__":
     traci.vehicle.setSpeedMode("nv0", 96)
     # 96 - no checks, 0 - most chcks off but speed limit adhered
 
+    traci.vehicle.setMinGap("nv0", 0.1)
+    traci.vehicle.setMinGap("nv1", 0.1)
+    traci.vehicle.setMinGap("nv2", 0.1)
+
+    for vehID in ["nv0", "nv1", "nv2"]:
+        traci.vehicle.setAccel(vehID, 10)
+        traci.vehicle.setDecel(vehID, 10)
+        traci.vehicle.setEmergencyDecel(vehID, 10)
+
+
     # single lane - so not neded next two lines
     # traci.vehicle.setLaneChangeMode("nv1", 3)
     # traci.vehicle.setLaneChangeMode("nv2", 3)
@@ -114,12 +124,15 @@ if __name__=="__main__":
         # Run MPC control if enabled
         start_t = time.time()
         if USING_ONLINE_MPC:
-            acc, preds_s, preds_v = traffic_online_MPC_control_step_nVeh(veh_states_matrix, 
+            acc, preds_s, preds_v = traffic_online_MPC_control_step_nVeh(veh_states_matrix[0:3], 
                                                        sim_t=sim_time, 
                                                        record_t=record_t,
                                                        front_v_t=front_v_t,
                                                        online_MPC_control=online_MPC_control,
-                                                       simStep=SIM_STEP
+                                                       simStep=SIM_STEP,
+                                                       mpc_dt=MPC_DT,
+                                                       mpc_ref_stages=MPC_REF_STAGES,
+                                                       verbose=True
                                                        )
         else:
             acc = {}
@@ -133,31 +146,15 @@ if __name__=="__main__":
                                         record_t=record_t,
                                         front_v_t=front_v_t,
                                         sim_t=sim_time,
-                                        simStep=SIM_STEP,
+                                        pred_dt=MPC_DT, mpc_ref_stages=MPC_REF_STAGES,
                                         colorChoice=(255,255,100), fill=False, layer=3)
-        sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(255, 0, 2, 100), fill=False, layer=3)
-        # sumo_sim_manager.add_traj("nv2", preds_s=preds_s["nv2"], colorChoice=(0,255,0,100), fill=False, layer=3)
+        sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(255, 0, 2, 100), fill=False, layer=4)
+        sumo_sim_manager.add_traj("nv2", preds_s=preds_s["nv2"], colorChoice=(0,255,0,100), fill=False, layer=5)
         
-        # remember: right now, preds are not in line with stalled preditions. Just fix the beginning first.
         
         # Assign the acceleration to MAchE vehicle
         sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=acc["nv2"], dt=SIM_STEP)
-        if sim_time > 7.9:
-            time.sleep(0.03)
-
-        # looks like: 
-        # lead vehicle pred: 0.1 sec = SIM_STEP, 
-        # Correct preview to lead vehicle. OK ll good 
-        # when the preds are passed to 2nd vehicle mpc ... something goes wrong.. PRED or PREVIEW?
-        # MPC predicts in 0.5 dt step.
-        # thungs are lightly better if i use PredAcc() instead of SetPred()
-        
-        if sim_time >= 45.0:
-            sumo_sim_manager.update_CAV_in_sumo(veh='nv1', spd=0.0)
-
-        else:
-            sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SIM_STEP)
-    
+        sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SIM_STEP)    
 
         veh_0_acc.append(veh_states_matrix[0][1])
         veh_0_spd.append(veh_states_matrix[0][2])
@@ -171,17 +168,25 @@ if __name__=="__main__":
         veh_2_acc.append(veh_states_matrix[2][1])
         veh_2_spd.append(veh_states_matrix[2][2])
         veh_2_dist.append(veh_states_matrix[2][3])
-        mache_accCmd.append(acc["nv2"])
+        # mache_accCmd.append(acc["nv2"])
         
         veh_sim_t.append(sim_time)
 
         # Sleep timing
         real_now = time.monotonic()
+
+        # if sim_time > 9.0:
+        #     print(preds_s['nv1'][31]-preds_s['nv1'][0], 
+        #         preds_s['nv2'][31]-preds_s['nv2'][0])
+        if sim_time >= 8.0:
+            time.sleep(0.01)
+            # time.sleep(0.05)
         
         if realtime_pacing:
             sleep_time = max(0, real_expected_time - real_now)  # Sleep only if ahead of real time
             time.sleep(sleep_time)  # Sync with real-world time
         print(f"Real elapsed: {real_now - real_start_time:.3f}s, Sim Time: {sim_time:.3f}s")
+        print("sumo_sim_manager.step is ", sumo_sim_manager.step)
     
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
     
@@ -210,7 +215,7 @@ if __name__=="__main__":
     plt.plot(veh_sim_t, veh_1_acc,'b')
     plt.plot(veh_sim_t, veh_2_acc, 'g')
     plt.plot(veh_sim_t, veh_1_accCmd, "b--")
-    plt.plot(veh_sim_t, mache_accCmd, 'g--')
+    # plt.plot(veh_sim_t, mache_accCmd, 'g--')
     # plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Acc [m/s^2]')
