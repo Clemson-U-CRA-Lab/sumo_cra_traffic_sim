@@ -115,7 +115,7 @@ class SumoSim():
                 pred_traj.append((x,y))
             except:
                 if f"{vehID}_traj" in traci.polygon.getIDList():
-                    print("vis trajectory extending beyong route... not plotting")
+                    # print("vis trajectory extending beyong route... not plotting")
                     traci.polygon.remove(f"{vehID}_traj")
                     pred_traj = []
                 break
@@ -158,8 +158,9 @@ class SumoSim():
                 x,y = traci.simulation.convert2D(edgeID=edgeID, pos=s, laneIndex=laneId)
                 pred_traj.append((x,y))
             except:
+                
                 if f"{vehID}_traj" in traci.polygon.getIDList():
-                    print("vis trajectory extending beyong route... not plotting")
+                    # print("vis trajectory extending beyong route... not plotting")
                     traci.polygon.remove(f"{vehID}_traj")
                     pred_traj = []
                 break

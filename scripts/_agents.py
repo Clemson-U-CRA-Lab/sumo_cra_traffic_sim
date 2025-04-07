@@ -140,7 +140,7 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.t = t # Dereference pointer with .contents method
         
         # Ego vehicle states
-        self.api.inputs_p.contents.ego_state[0] = ego_s # self.s + self.len # MPC wants the Frenet front bumper position - the simulation was written so that .s is the back bumper position for each simulated vehicle so add vehicle len to get front bumper
+        self.api.inputs_p.contents.ego_state[0] = ego_s + 1.75 # self.s + self.len # MPC wants the Frenet front bumper position - the simulation was written so that .s is the back bumper position for each simulated vehicle so add vehicle len to get front bumper
         self.api.inputs_p.contents.ego_state[1] = ego_v # self.v # Frenet forward velocity
         self.api.inputs_p.contents.ego_state[2] = ego_a # self.a # Frenet forward acceleration - use previous Ua command if unknown/very inaccurate ego accel
         

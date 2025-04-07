@@ -31,7 +31,7 @@ class x2vSocketInterface:
         while count <= 12:
             try:
                 client_socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-                client_socket.connect((self.ip, self.port, 0, 2))
+                client_socket.connect((self.ip, self.port, 0, INTERFACE_SCOPE_ID))
                 print(f"{bcolors.OKBLUE}Connected to server (RSU)!{bcolors.ENDC}")
                 return client_socket
             except (ConnectionRefusedError, OSError):
@@ -83,7 +83,7 @@ class x2vSocketInterfaceAsync:
         while count <= 12:
             try:
                 client_socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-                client_socket.connect((self.ip, self.port, 0, 2))
+                client_socket.connect((self.ip, self.port, 0, INTERFACE_SCOPE_ID))
                 print(f"{bcolors.OKBLUE}Connected to server (RSU)!{bcolors.ENDC}")
                 return client_socket
             except (ConnectionRefusedError, OSError):

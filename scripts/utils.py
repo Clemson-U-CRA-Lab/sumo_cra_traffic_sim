@@ -175,7 +175,9 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
                                          front_v_t, online_MPC_control, 
                                          simStep, mpc_dt=0.5, 
                                          mpc_ref_stages=50, 
-                                         verbose=False):
+                                         verbose=False,
+                                         useFirstVehCyclePreview=False,
+                                         outputUsedCycleforFront=False):
     """
     Perform online MPC control step for multiple vehicles.
     
@@ -190,16 +192,18 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
     accelerations = {}
     preds_s ={}
     preds_v = {}
-    
+    cycle_dt = mpc_dt
+    # cycle_dt = simStep
+
     # Compute leading vehicle's driving cycle
     cycle_vs = np.full(mpc_ref_stages, np.nan)
     tPred = np.full(mpc_ref_stages, np.nan)
     for i in range(mpc_ref_stages):
-        t_id = np.argmin(np.abs(record_t - (i * mpc_dt + sim_t)))
+        t_id = np.argmin(np.abs(record_t - (i * cycle_dt + sim_t)))
         cycle_vs[i] = front_v_t[t_id]
         tPred[i] = record_t[t_id]
 
-    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=mpc_dt, initial=0) + nVehicleStatesMatrix[0][3]
+    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=cycle_dt, initial=0) + nVehicleStatesMatrix[0][3]
     
     # Iterate over states (excluding the leader)
     prev_pred_s, prev_pred_v = cycle_ss, cycle_vs
@@ -214,8 +218,8 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
                                                 ego_s=ego_dist, ego_v=ego_spd, ego_a=ego_acc,
                                                 pv_s=pv_dist, pv_v=pv_spd, pv_a=pv_acc,
                                                 cycle_ss=prev_pred_s, cycle_vs=prev_pred_v,
-                                                cycle_dt=mpc_dt, n_refs=mpc_ref_stages,
-                                                preview=True
+                                                cycle_dt=cycle_dt, n_refs=mpc_ref_stages,
+                                                preview=useFirstVehCyclePreview # no preds for nv0
             )
             preds_s[nVehicleStatesMatrix[i][0]] = pred_s
             preds_v[nVehicleStatesMatrix[i][0]] = pred_v
@@ -249,6 +253,8 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
 
         prev_pred_s, prev_pred_v = pred_s, pred_v
         
+    if outputUsedCycleforFront:
+        return accelerations, preds_s, preds_v, cycle_ss, cycle_vs
     
     return accelerations, preds_s, preds_v
 

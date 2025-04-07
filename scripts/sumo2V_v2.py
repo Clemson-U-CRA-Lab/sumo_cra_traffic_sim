@@ -13,9 +13,6 @@ import time
 import struct
 from x2v_constants import *
 
-import struct
-from x2v_constants import *
-
 # import classes
 from SumoSim import SumoSim
 
@@ -27,6 +24,7 @@ else:
 
 StalledNv = 'nv1' # the car that stalls
 RealCav = "nv2" # mache
+
 
 if __name__=="__main__":
 
@@ -73,13 +71,10 @@ if __name__=="__main__":
     sumo_sim_manager = SumoSim(sumo_config_name=parent_dir + "/sumo/v2x/v2x.sumocfg")
     sumo_sim_manager.start_Sumo(gui=True)
 
-    traci.vehicle.setSpeed("nv2", 0.0)
-    traci.vehicle.setSpeed("nv1", 0.0)
-    traci.vehicle.setSpeed("nv0", 0.0)
-    # traci.vehicle.setSpeedMode("nv1", 0)
-    # traci.vehicle.setSpeedMode("nv2", 0)
-    traci.vehicle.setSpeedMode("nv1", 96)
-    traci.vehicle.setSpeedMode("nv2", 96)
+    for vehID in traci.vehicle.getIDList():
+        traci.vehicle.setMinGap(vehID, 0.1)
+        traci.vehicle.setSpeed(vehID, 0.0)
+        traci.vehicle.setSpeedMode(vehID, 96)
 
     traci.gui.trackVehicle("View #0", "nv2")
     traci.gui.setZoom("View #0", 500)
@@ -122,7 +117,13 @@ if __name__=="__main__":
                                                        sim_t=sim_time, 
                                                        record_t=record_t,
                                                        front_v_t=front_v_t,
-                                                       online_MPC_control=online_MPC_control)
+                                                       online_MPC_control=online_MPC_control,
+                                                       simStep=SIM_STEP,
+                                                       mpc_dt=MPC_DT,
+                                                       mpc_ref_stages=MPC_REF_STAGES,
+                                                       verbose=True,
+                                                       outputUsedCycleforFront=False
+                                                       )
         else:
             acc = {}
             for veh in vehicle_list:
