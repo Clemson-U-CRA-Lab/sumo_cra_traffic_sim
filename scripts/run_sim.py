@@ -23,9 +23,9 @@ class sumo_sim():
         self.num_veh = num_vehicle
         self.sumo_veh = [None]*num_vehicle
         for i in range(int(self.num_veh / 2)):
-            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 300 - 12 * i + random.uniform(-2., 2.), init_lane=1, route_ID="route1", lane_change_mode=0)
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 325 - 12 * i + random.uniform(-2., 2.), init_lane=1, route_ID="route1", lane_change_mode=0)
         for j in range(int(self.num_veh / 2), self.num_veh):
-            self.sumo_veh[j] = SUMO_vehicles(vehicle_ID="veh" + str(j), init_s= 285 - 12 * (j - int(num_veh/2)) + random.uniform(-2., 2.), init_lane=2, route_ID="route1", lane_change_mode=0)
+            self.sumo_veh[j] = SUMO_vehicles(vehicle_ID="veh" + str(j), init_s= 300 - 12 * (j - int(num_veh/2)) + random.uniform(-2., 2.), init_lane=2, route_ID="route1", lane_change_mode=0)
 
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
@@ -111,12 +111,18 @@ if __name__=="__main__":
     traci.gui.trackVehicle("View #0", "veh1")
     traci.gui.setZoom("View #0", 10000)
     
-    while sumo_sim_manager.step < int(len(record_t) * 1.2):
+    Avg_spd_traffic = []
+    Avg_density_traffic = []
+    lead_s = 325.0
+    end_s = 0.0
+    
+    while sumo_sim_manager.step < int(len(record_t) * 1.25):
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
         # Initialize power record
         P_t = []
+        Spd_t = []
         
         start_t = time.time()
         
@@ -131,14 +137,22 @@ if __name__=="__main__":
                 v_lead_id = np.argmin(np.abs([record_t - sim_t]))
                 v_tgt_lead = front_v_t[v_lead_id] #+ 2.0 * (random.random() - 0.5)
                 sumo_sim_manager.sumo_veh[i].assignTargetSpeed(v_tgt_lead)
+                [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t] = sumo_sim_manager.sumo_veh[i].getVehicleStates()
+                lead_s = veh_1_dist_t
                 continue
             
             [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t] = sumo_sim_manager.sumo_veh[i-1].getVehicleStates()
             [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t] = sumo_sim_manager.sumo_veh[i].getVehicleStates()
             
+            if i == num_veh - 1:
+                end_s = veh_1_dist_t
+            
             # Compute vehicle power at time sim_t
             P_t.append(engine_power_estimation(ego_v=veh_1_spd_t, ego_a=veh_1_acc_t))
-
+            
+            # Add the vehicle speed
+            Spd_t.append(veh_1_spd_t)
+            
             if USING_ONLINE_MPC:
                 acc_traffic_step_t = traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
                                                                      veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
@@ -149,12 +163,6 @@ if __name__=="__main__":
                 s_st_traffic.append(veh_1_dist_t)
                 pv_st_traffic.append(veh_0_dist_t)
                 continue
-                # Get back vehicle speed and distance
-                # s_vt_traffic = np.array([veh_1_spd_t])
-                # pv_vt_traffic = np.array([veh_0_spd_t])
-                # s_st_traffic = np.array([veh_1_dist_t])
-                # pv_st_traffic = np.array([veh_0_dist_t])
-                # acc_traffic_step_t = FCN_control.step_forward(s_vt=s_vt_traffic, pv_vt=pv_vt_traffic, s_st=s_st_traffic, pv_st=pv_st_traffic)
             elif USING_IDM:
                 acc_traffic_step_t = IDM_control.IDM_acceleration(front_v=np.array([veh_0_spd_t]),
                                                                   ego_v=np.array([veh_1_spd_t]),
@@ -180,8 +188,16 @@ if __name__=="__main__":
                 else:
                     continue
         
+        # Add power consumption
         Power_t.append(P_t)
         
+        # Add traffic flow speed
+        avg_spd_t = np.mean(np.array(Spd_t))
+        Avg_spd_traffic.append(avg_spd_t)
+        
+        # Add traffic density
+        traffic_rho = traffic_density_measurement(lead_s=lead_s, end_s=end_s, num_vehicles=num_veh)
+        Avg_density_traffic.append(traffic_rho)
         veh_sim_t.append(sim_t)
         
         runtime_record.append(time.time() - start_t)
@@ -201,3 +217,16 @@ if __name__=="__main__":
     print(np.round(Energy_t / 1000, decimals=2))
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
     print('Runtime standard deviation is: ', str(round(np.std(runtime_record) * 1000, 4)), 'ms')
+    
+    plt.figure(1)
+    plt.subplot(2,1,1)
+    plt.plot(veh_sim_t, Avg_spd_traffic, '-b')
+    plt.xlabel('Time [s]', fontsize=24)
+    plt.ylabel('Average speed [m/s]', fontsize=24)
+    
+    plt.subplot(2,1,2)
+    plt.plot(veh_sim_t, Avg_density_traffic, '-b')
+    plt.xlabel('Time [s]', fontsize=24)
+    plt.ylabel('Traffic density [veh/km]', fontsize=24)
+    
+    plt.show()

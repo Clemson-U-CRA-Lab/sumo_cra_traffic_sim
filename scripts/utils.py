@@ -187,3 +187,11 @@ def data_logger(sim_t, ego_a, ego_v, ego_s, pv_a, pv_v, pv_s, filename):
     with open(filename, "a") as f:
         writer = csv.writer(f)
         writer.writerow([sim_t, ego_a, ego_v, ego_s, pv_a, pv_v, pv_s])
+        
+def traffic_density_measurement(lead_s, end_s, num_vehicles):
+    rho = num_vehicles / ((lead_s - end_s) / 1000)
+    return rho
+
+def average_speed_measurement(veh_v_t):
+    avg_veh_v_t = np.mean(np.array(veh_v_t))
+    return avg_veh_v_t
