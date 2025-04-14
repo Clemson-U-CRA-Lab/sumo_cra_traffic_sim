@@ -97,8 +97,8 @@ class PCC(_vehicle):
             pv_state[0] = self.api.inputs_p.contents.pos_pred[k]
             pv_state[1] = self.api.inputs_p.contents.vel_pred[k]
 
-    def setPred(self, t, pv_state, cycle_ss, cycle_vs, n_pred_steps=50):
-        dt_pred = 0.10 # Time stepsize between prediction stages [s]
+    def setPred(self, t, pv_state, cycle_ss, cycle_vs, cycle_dt, n_pred_steps=50):
+        dt_pred = cycle_dt # Time stepsize between prediction stages [s]
         t_pred = t # [s]
 
         k = 0 # First index is current PV states
@@ -118,7 +118,7 @@ class PCC(_vehicle):
             
             self.api.inputs_p.contents.time_pred[k] = t_pred
     
-    def setCommand_SUMO(self, t, ego_s, ego_v, ego_a, pv_s, pv_v, pv_a, pv_ind=0):
+    def setCommand_SUMO(self, t, ego_s, ego_v, ego_a, pv_s, pv_v, pv_a, cycle_ss, cycle_vs, cycle_dt, pv_ind=0):
         '''Set the control commands, for example desired acceleration and desired lane'''
         # Controller parameters
         s_max = 50000 # Max position [m]
@@ -155,8 +155,10 @@ class PCC(_vehicle):
             self.api.inputs_p.contents.time_pred[k] = nan
 
         # Predict PV motion and then write to inputs
-        # self.setPred(t, pv_state, cycle_ss, cycle_vs)
-        self.predAcc(t=t, pv_state=pv_state, v_max=20)
+        if USING_PREVIEW:
+            self.setPred(t, pv_state, cycle_ss, cycle_vs, cycle_dt)
+        else:
+            self.predAcc(t=t, pv_state=pv_state, v_max=20)
         
         # Ego vehicle state constraints
         self.api.inputs_p.contents.pos_max = s_max
