@@ -107,7 +107,6 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
-        n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
         for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
             # Include prediction from external module
             t_pred += dt_pred
@@ -135,7 +134,7 @@ class PCC(_vehicle):
         
         pv_state = [None]*3
         if pv_ind >= 0:
-            pv_state[0] = pv_s  # Expects Frenet back bumper position - Front Bumper to back bumper Gap from sensor + Ego S
+            pv_state[0] = pv_s # Expects Frenet back bumper position - Front Bumper to back bumper Gap from sensor + Ego S
             pv_state[1] = pv_v # Forward velocity
             pv_state[2] = pv_a # Forward acceleration
 
@@ -156,9 +155,9 @@ class PCC(_vehicle):
 
         # Predict PV motion and then write to inputs
         if USING_PREVIEW:
-            self.setPred(t, pv_state, cycle_ss, cycle_vs, cycle_dt)
+            self.setPred(t=t, pv_state=pv_state, cycle_ss=cycle_ss, cycle_vs=cycle_vs, cycle_dt=cycle_dt, n_pred_steps=30)
         else:
-            self.predAcc(t=t, pv_state=pv_state, v_max=20)
+            self.predAcc(t=t, pv_state=pv_state, v_max=30)
         
         # Ego vehicle state constraints
         self.api.inputs_p.contents.pos_max = s_max
@@ -192,7 +191,7 @@ class PCC(_vehicle):
 
         pos_traj = state_trajectory[0::n_states] # Pos state starts at index 0
         vel_traj = state_trajectory[1::n_states] # Vel state starts at index 1
-        # acc_traj = state_trajectory[2::n_states] # Acc state starts at index 2
+        acc_traj = state_trajectory[2::n_states] # Acc state starts at index 2
         
         return pos_traj, vel_traj, acc_des
 

@@ -37,7 +37,7 @@ class PCC_MPC_controller():
         self.s = 0.0
         self.v = 0.0
         self.a = 0.0
-        self.svs = PCC(dirname, self.s, self.v, self.a, v_max=20)
+        self.svs = PCC(dirname, self.s, self.v, self.a, v_max=30)
         
     def step_forward(self, PV_ds, PV_v, PV_a, future_s, future_v, t):
         # Find control from MPC optimization and control the vehicle

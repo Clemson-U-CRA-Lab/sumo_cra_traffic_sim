@@ -23,9 +23,9 @@ class sumo_sim():
         self.num_veh = num_vehicle
         self.sumo_veh = [None]*num_vehicle
         for i in range(int(self.num_veh / 2)):
-            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 325 - 12 * i + random.uniform(-2., 2.), init_lane=1, route_ID="route1", lane_change_mode=0)
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 325 - 12 * i, init_lane=1, route_ID="route1", lane_change_mode=0)
         for j in range(int(self.num_veh / 2), self.num_veh):
-            self.sumo_veh[j] = SUMO_vehicles(vehicle_ID="veh" + str(j), init_s= 300 - 12 * (j - int(num_veh/2)) + random.uniform(-2., 2.), init_lane=2, route_ID="route1", lane_change_mode=0)
+            self.sumo_veh[j] = SUMO_vehicles(vehicle_ID="veh" + str(j), init_s= 300 - 12 * (j - int(num_veh/2)), init_lane=2, route_ID="route1", lane_change_mode=0)
 
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
@@ -116,7 +116,7 @@ if __name__=="__main__":
     lead_s = 325.0
     end_s = 0.0
     
-    while sumo_sim_manager.step < int(len(record_t) * 1.25):
+    while sumo_sim_manager.step < int(len(record_t) * 1.2):
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
@@ -139,6 +139,10 @@ if __name__=="__main__":
                 sumo_sim_manager.sumo_veh[i].assignTargetSpeed(v_tgt_lead)
                 [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t] = sumo_sim_manager.sumo_veh[i].getVehicleStates()
                 lead_s = veh_1_dist_t
+                # Update state preview
+                lead_prev_v, lead_prev_s = driving_cycle_state_preview_searching(sim_t=sim_t, record_t=record_t, front_v_t=front_v_t, mpc_dt=0.5, front_s_init=lead_s)
+                # Load future state preview                 
+                sumo_sim_manager.sumo_veh[i].update_vehicle_future_states_preview(lead_prev_s, lead_prev_v)
                 continue
             
             [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t] = sumo_sim_manager.sumo_veh[i-1].getVehicleStates()
@@ -156,7 +160,9 @@ if __name__=="__main__":
             if USING_ONLINE_MPC:
                 acc_traffic_step_t = traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
                                                                      veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
-                                                                     sim_t, online_MPC_control)
+                                                                     sim_t, online_MPC_control, record_t,
+                                                                     front_v_t, 0.5, pv_object=sumo_sim_manager.sumo_veh[i-1],
+                                                                     ego_object=sumo_sim_manager.sumo_veh[i], leading_preview=False)
             elif USING_NEURAL_NETWORK:
                 s_vt_traffic.append(veh_1_spd_t)
                 pv_vt_traffic.append(veh_0_spd_t)
@@ -170,9 +176,9 @@ if __name__=="__main__":
                                                                   ego_s=np.array([veh_1_dist_t]))
             else:
                 acc_traffic_step_t = np.zeros(3)
-
+                
             acc = acc_traffic_step_t[0]
-        
+            
             # Assign the acceleration to ego vehicle
             sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc)
         
@@ -221,12 +227,18 @@ if __name__=="__main__":
     plt.figure(1)
     plt.subplot(2,1,1)
     plt.plot(veh_sim_t, Avg_spd_traffic, '-b')
-    plt.xlabel('Time [s]', fontsize=24)
-    plt.ylabel('Average speed [m/s]', fontsize=24)
+    plt.xlabel('Time [s]', fontsize=20)
+    plt.ylabel('Average speed [m/s]', fontsize=20)
     
     plt.subplot(2,1,2)
     plt.plot(veh_sim_t, Avg_density_traffic, '-b')
-    plt.xlabel('Time [s]', fontsize=24)
-    plt.ylabel('Traffic density [veh/km]', fontsize=24)
+    plt.xlabel('Time [s]', fontsize=20)
+    plt.ylabel('Traffic density [veh/km]', fontsize=20)
+    
+    plt.figure(2)
+    plt.hist(Avg_density_traffic, bins=40, color='skyblue', density=True)
+    plt.xlabel('Average density [veh/km]', fontsize=20)
+    plt.ylabel('Percentage', fontsize=20)
+    plt.xlim([0, 150])
     
     plt.show()

@@ -29,6 +29,8 @@ class SUMO_vehicles():
         self.s = init_s
         self.init_dist = init_s
         self.lane_ID = init_lane
+        self.pv_s_prev = None
+        self.pv_v_prev = None
         
         traci.vehicle.add(self.ID, route_ID, typeID = 'car', departLane=str(self.lane_ID), departPos=self.s)
         traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=lane_change_mode)
@@ -49,6 +51,10 @@ class SUMO_vehicles():
     
     def assignLaneChangeMode(self, mode):
         traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=mode)
+    
+    def update_vehicle_future_states_preview(self, pv_s, pv_v):
+        self.pv_s_prev = pv_s
+        self.pv_v_prev = pv_v
 
 def delta_yaw_correction(delta_yaw):
     if delta_yaw > math.pi:
@@ -157,9 +163,7 @@ def TTCi_estimate(ego_v, front_v, front_s):
     ttc_i = (ego_v - front_v) / front_s
     return ttc_i
 
-def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
-                                    veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
-                                    sim_t, online_MPC_control, record_t, front_v_t, mpc_dt):
+def driving_cycle_state_preview_searching(sim_t, record_t, front_v_t, mpc_dt, front_s_init):
     # Find leading vehicle's driving cycle
     cycle_vs = np.empty(32)
     cycle_vs.fill(np.nan)
@@ -168,87 +172,29 @@ def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
         t_id = np.argmin(np.abs([record_t - (i * mpc_dt + sim_t)]))
         cycle_vs[i] = front_v_t[t_id]
     
-    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=mpc_dt) + veh_0_dist_t
+    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=mpc_dt) + front_s_init
     
+    return cycle_vs, cycle_ss
+    
+
+def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
+                                    veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
+                                    sim_t, online_MPC_control, record_t, 
+                                    front_v_t, mpc_dt, pv_object, ego_object, 
+                                    leading_preview=False):
+    
+    if leading_preview:
+        cycle_vs, cycle_ss = driving_cycle_state_preview_searching(sim_t=sim_t, record_t=record_t, front_v_t=front_v_t, mpc_dt=mpc_dt, front_s_init=veh_0_dist_t)
+    else:
+        cycle_vs = pv_object.pv_v_prev
+        cycle_ss = pv_object.pv_s_prev
+        
     veh_1_pred_s, veh_1_pred_v, a_MPC = online_MPC_control.svs.setCommand_SUMO(t = sim_t, ego_s=veh_1_dist_t, ego_v=veh_1_spd_t, ego_a=veh_1_acc_t,
                                                    pv_s=veh_0_dist_t, pv_v=veh_0_spd_t, pv_a=veh_0_acc_t, cycle_ss=cycle_ss, cycle_vs=cycle_vs, cycle_dt=mpc_dt)
-        
+    
+    ego_object.update_vehicle_future_states_preview(np.array(veh_1_pred_s) - 5.0, veh_1_pred_v)
+    
     return [a_MPC]
-
-def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix, 
-                                         sim_t, record_t, 
-                                         front_v_t, online_MPC_control, 
-                                         mpc_dt=0.5, mpc_ref_stages=50, 
-                                         useFirstVehCyclePreview=False,
-                                         outputUsedCycleforFront=False):
-    """
-    Perform online MPC control step for multiple vehicles.
-    
-    :param states: List of vehicle states [[acc, spd, dist, lane, pos], [..], ...] in order of leading to trailing.
-    :param sim_t: Current simulation time.
-    :param record_t: time of profile
-    :param front_v_t: Speed profile of the leading vehicle.
-    :param online_MPC_control: MPC controller object.
-    :return: List of computed accelerations for each vehicle except the leader.
-    """
-    num_vehicles = len(nVehicleStatesMatrix)
-    accelerations = {}
-    preds_s ={}
-    preds_v = {}
-    cycle_dt = mpc_dt
-    # cycle_dt = simStep
-
-    # Compute leading vehicle's driving cycle
-    cycle_vs = np.full(mpc_ref_stages, np.nan)
-    tPred = np.full(mpc_ref_stages, np.nan)
-    for i in range(mpc_ref_stages):
-        t_id = np.argmin(np.abs(record_t - (i * cycle_dt + sim_t)))
-        cycle_vs[i] = front_v_t[t_id]
-        tPred[i] = record_t[t_id]
-
-    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=cycle_dt, initial=0) + nVehicleStatesMatrix[0][3]
-    
-    # Iterate over states (excluding the leader)
-    prev_pred_s, prev_pred_v = cycle_ss, cycle_vs
-    for i in range(1, num_vehicles):
-        
-        if i == 1:
-            ego_acc, ego_spd, ego_dist = nVehicleStatesMatrix[i][1:4]
-            pv_acc, pv_spd, pv_dist = nVehicleStatesMatrix[i-1][1:4]
-            
-            pred_s, pred_v, acc, pred_t = online_MPC_control.svs.setCommand_SUMO(
-                                                t=sim_t, 
-                                                ego_s=ego_dist, ego_v=ego_spd, ego_a=ego_acc,
-                                                pv_s=pv_dist, pv_v=pv_spd, pv_a=pv_acc,
-                                                cycle_ss=prev_pred_s, cycle_vs=prev_pred_v,
-                                                cycle_dt=cycle_dt, n_refs=mpc_ref_stages,
-                                                preview=useFirstVehCyclePreview # no preds for nv0
-            )
-            preds_s[nVehicleStatesMatrix[i][0]] = pred_s
-            preds_v[nVehicleStatesMatrix[i][0]] = pred_v
-            accelerations[nVehicleStatesMatrix[i][0]] = acc
-        else:   
-            ego_acc, ego_spd, ego_dist = nVehicleStatesMatrix[i][1:4]
-            pv_acc, pv_spd, pv_dist = nVehicleStatesMatrix[i-1][1:4]
-            
-            pred_s, pred_v, acc, pred_t = online_MPC_control.svs.setCommand_SUMO(
-                                                t=sim_t, 
-                                                ego_s=ego_dist, ego_v=ego_spd, ego_a=ego_acc,
-                                                pv_s=pv_dist, pv_v=pv_spd, pv_a=pv_acc,
-                                                cycle_ss=prev_pred_s, cycle_vs=prev_pred_v,
-                                                cycle_dt=mpc_dt, n_refs=32,
-                                                preview=True
-            )
-            preds_s[nVehicleStatesMatrix[i][0]] = pred_s
-            preds_v[nVehicleStatesMatrix[i][0]] = pred_v
-            accelerations[nVehicleStatesMatrix[i][0]] = acc
-
-        prev_pred_s, prev_pred_v = pred_s, pred_v
-        
-    if outputUsedCycleforFront:
-        return accelerations, preds_s, preds_v, cycle_ss, cycle_vs
-    
-    return accelerations, preds_s, preds_v
 
 def engine_power_estimation(ego_v, ego_a):
     m = 2218 # Vehicle weights
