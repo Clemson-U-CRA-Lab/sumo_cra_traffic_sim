@@ -19,13 +19,19 @@ class sumo_sim():
         self.num_veh = 0
         self.step = 0
     
-    def init_vehicles(self, num_vehicle):
+    def init_vehicles_large_map(self, num_vehicle):
         self.num_veh = num_vehicle
         self.sumo_veh = [None]*num_vehicle
         for i in range(int(self.num_veh / 2)):
-            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 325 - 12 * i, init_lane=1, route_ID="route1", lane_change_mode=0)
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 20 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0)
         for j in range(int(self.num_veh / 2), self.num_veh):
-            self.sumo_veh[j] = SUMO_vehicles(vehicle_ID="veh" + str(j), init_s= 300 - 12 * (j - int(num_veh/2)), init_lane=2, route_ID="route1", lane_change_mode=0)
+            self.sumo_veh[j] = SUMO_vehicles(vehicle_ID="veh" + str(j), init_s= 30 - 12 * (j - int(num_veh/2)), init_lane=0, route_ID="route1", lane_change_mode=0)
+    
+    def init_vehicles_CMI(self, num_vehicle):
+        self.num_veh = num_vehicle
+        self.sumo_veh = [None]*num_vehicle
+        for i in range(self.num_veh):
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 30 - 10 * i, init_lane=0, route_ID="route1", lane_change_mode=0)
 
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
@@ -41,7 +47,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--logging_sim", help="whether to save the simulation data", action="store_true")
     parser.add_argument("--num_sv", type=int, default=5.0, help="Number of vehicles in the traffic")
-    parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy'], help='Choose leading vehicles speed profile')
+    parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy', 'US06','Simple'], help='Choose leading vehicles speed profile')
     parser.add_argument("control_type", choices=['MPC', 'NN', 'IDM'], help='Choose control method for traffic vehicles')
     args = parser.parse_args()
     
@@ -73,20 +79,27 @@ if __name__=="__main__":
         spd_filename = parent_dir + "/speed_profile/I85_hwycol.csv"
     elif args.leading_speed_profile == 'Nyc':
         spd_filename = parent_dir + "/speed_profile/I85_nycccol.csv"
+    elif args.leading_speed_profile == 'US06':
+        spd_filename = parent_dir + "/speed_profile/US06_CMI_Urban_speed_profile.csv"
+    elif args.leading_speed_profile == 'Simple':
+        spd_filename = parent_dir + "/speed_profile/ITIC_Lane_Change_Modeling_StartLane_Fast.csv"
     else:
         print('Unable to locate speed profile')
         sys.exit(1)
     leading_vehicle_speed_profile = driving_cycle_spd_profile_reader(spd_filename)
     
-    # sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
-    sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
+    if args.leading_speed_profile == 'Hwy' or args.leading_speed_profile == 'Nyc':
+        sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
+        sumo_sim_manager.init_vehicles_large_map(num_vehicle=num_veh)
+    else:
+        sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/CMI/cmi.sumocfg")
+        sumo_sim_manager.init_vehicles_CMI(num_vehicle=num_veh)
+        
     sumo_sim_manager.start_Sumo()
-    sumo_sim_manager.init_vehicles(num_vehicle=num_veh)
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
     nn_pt_filename = dirname + '/traffic_following_control.pt'
-    table_filename = dirname + '/Utable_2states_MPC_terminal.npy'
     
     # Setup controller
     if USING_NEURAL_NETWORK:
@@ -116,7 +129,7 @@ if __name__=="__main__":
     lead_s = 325.0
     end_s = 0.0
     
-    while sumo_sim_manager.step < int(len(record_t) * 1.2):
+    while sumo_sim_manager.step * 0.1 < record_t[-1]:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
