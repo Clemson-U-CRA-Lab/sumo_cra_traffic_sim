@@ -90,12 +90,12 @@ if __name__=="__main__":
     
     if args.leading_speed_profile == 'Hwy' or args.leading_speed_profile == 'Nyc':
         sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
+        sumo_sim_manager.start_Sumo()
         sumo_sim_manager.init_vehicles_large_map(num_vehicle=num_veh)
     else:
         sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/CMI/cmi.sumocfg")
+        sumo_sim_manager.start_Sumo()
         sumo_sim_manager.init_vehicles_CMI(num_vehicle=num_veh)
-        
-    sumo_sim_manager.start_Sumo()
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
@@ -103,7 +103,7 @@ if __name__=="__main__":
     
     # Setup controller
     if USING_NEURAL_NETWORK:
-        FCN_control = NN_controller(nn_pt_file=nn_pt_filename)
+        FCN_control = NN_controller(nn_pt_file=nn_pt_filename, input_num=3)
         controller_name = 'Neural_Network'
         print('Use neural network to control traffic vehicles')
     elif USING_ONLINE_MPC:
@@ -111,7 +111,7 @@ if __name__=="__main__":
         controller_name = 'Online_MPC'
         print('Use online MPC to control traffic vehicles')
     elif USING_IDM:
-        IDM_control = IDM(a=4, b=5, s0=3, v0=20, T=1)
+        IDM_control = IDM(a=4, b=5, s0=3, v0=20, T=4)
         controller_name = 'Intelligent Driving Model'
         print('Use IDM to control traffic vehicles')
     else:
@@ -126,10 +126,12 @@ if __name__=="__main__":
     
     Avg_spd_traffic = []
     Avg_density_traffic = []
+    ego_v = []
+    pv_v = []
     lead_s = 325.0
     end_s = 0.0
     
-    while sumo_sim_manager.step * 0.1 < record_t[-1]:
+    while sumo_sim_manager.step * 0.1 < record_t[-1] + 15:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
@@ -141,11 +143,15 @@ if __name__=="__main__":
         
         s_vt_traffic = []
         pv_vt_traffic = []
+        
         s_st_traffic = []
         pv_st_traffic = []
         
+        s_at_traffic = []
+        pv_at_traffic = []
+        
         for i in range(0, num_veh):
-            if i == 0 or  i == int(num_veh/2):
+            if i == 0:# or i == int(num_veh/2):
                 # Get leading vehicle speed
                 v_lead_id = np.argmin(np.abs([record_t - sim_t]))
                 v_tgt_lead = front_v_t[v_lead_id] #+ 2.0 * (random.random() - 0.5)
@@ -153,7 +159,7 @@ if __name__=="__main__":
                 [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t] = sumo_sim_manager.sumo_veh[i].getVehicleStates()
                 lead_s = veh_1_dist_t
                 # Update state preview
-                lead_prev_v, lead_prev_s = driving_cycle_state_preview_searching(sim_t=sim_t, record_t=record_t, front_v_t=front_v_t, mpc_dt=0.5, front_s_init=lead_s)
+                lead_prev_v, lead_prev_s = driving_cycle_state_preview_searching(sim_t=sim_t, record_t=record_t, front_v_t=front_v_t, mpc_dt=0.1, front_s_init=lead_s)
                 # Load future state preview                 
                 sumo_sim_manager.sumo_veh[i].update_vehicle_future_states_preview(lead_prev_s, lead_prev_v)
                 continue
@@ -181,6 +187,8 @@ if __name__=="__main__":
                 pv_vt_traffic.append(veh_0_spd_t)
                 s_st_traffic.append(veh_1_dist_t)
                 pv_st_traffic.append(veh_0_dist_t)
+                s_at_traffic.append(veh_1_acc_t)
+                pv_at_traffic.append(veh_0_acc_t)
                 continue
             elif USING_IDM:
                 acc_traffic_step_t = IDM_control.IDM_acceleration(front_v=np.array([veh_0_spd_t]),
@@ -197,18 +205,24 @@ if __name__=="__main__":
         
         if USING_NEURAL_NETWORK:
             acc_traffic_step_t = FCN_control.step_forward(s_vt=np.array(s_vt_traffic), pv_vt=np.array(pv_vt_traffic), 
-                                                          s_st=np.array(s_st_traffic), pv_st=np.array(pv_st_traffic))
-            
-            for i in range(1, num_veh):
-                if i < int(num_veh / 2):
-                    sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1])
-                elif i > int(num_veh / 2):
-                    sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-2])
-                else:
-                    continue
+                                                          s_st=np.array(s_st_traffic), pv_st=np.array(pv_st_traffic),
+                                                          s_at=np.array(s_at_traffic), pv_at=np.array(pv_at_traffic))
+            sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0])
+            # for i in range(1, num_veh):
+            #     if i < int(num_veh / 2):
+            #         sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1])
+            #     elif i > int(num_veh / 2):
+            #         sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-2])
+            #     else:
+            #         continue
         
         # Add power consumption
         Power_t.append(P_t)
+        ego_state_t = sumo_sim_manager.sumo_veh[1].getVehicleStates()
+        pv_state_t = sumo_sim_manager.sumo_veh[0].getVehicleStates()
+                
+        ego_v.append(ego_state_t[1])
+        pv_v.append(pv_state_t[1])
         
         # Add traffic flow speed
         avg_spd_t = np.mean(np.array(Spd_t))
@@ -253,5 +267,11 @@ if __name__=="__main__":
     plt.xlabel('Average density [veh/km]', fontsize=20)
     plt.ylabel('Percentage', fontsize=20)
     plt.xlim([0, 150])
+    
+    plt.figure(3)
+    plt.plot(veh_sim_t, ego_v, '-k')
+    plt.plot(veh_sim_t, pv_v, '-b')
+    plt.xlabel('Time [s]', fontsize=20)
+    plt.ylabel('Ego vehicle speed [m/s]', fontsize=20)
     
     plt.show()

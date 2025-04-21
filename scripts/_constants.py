@@ -28,7 +28,7 @@ SENSOR_RANGE = 100 # [m] Reliable sensor detection range
 
 # Prediction settings
 USING_PRED = False # If using prediction provided from cycle
-USING_PREVIEW = True # If using a direct preview of upcoming cycle
+USING_PREVIEW = False # If using a direct preview of upcoming cycle
 
 ### Error checking
 assert not (USING_PRED and USING_PREVIEW), 'Cannot use both PRED and PREVIEW settings.'

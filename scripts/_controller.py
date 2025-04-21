@@ -29,7 +29,7 @@ class IDM():
             (ego_v - front_v) / (2 * (self.a * self.b)**0.5)
         acc = self.a * (1 - (ego_v / self.v0) ** 4 -
                         (s_safe / (front_s - ego_s - 7)) ** 2)
-        acc = np.clip(acc, -9, 3)
+        acc = np.clip(acc, -3, 3)
         return acc
     
 class PCC_MPC_controller():
@@ -51,17 +51,37 @@ class Model(nn.Module):
         x = F.sigmoid(self.fc2(x))
         x = self.out(x)
         return x
+
+class Model_3_input(nn.Module):
+    def __init__(self, in_features=4, h1=256, h2=256, h3=32, out_features=1):
+        super().__init__()
+        self.fc1 = nn.Linear(in_features, h1)
+        self.fc2 = nn.Linear(h1, h2)
+        self.out = nn.Linear(h2, out_features)
+
+    def forward(self, x):
+        x = F.sigmoid(self.fc1(x))
+        x = F.sigmoid(self.fc2(x))
+        x = self.out(x)
+        return x
         
 class NN_controller():
-    def __init__(self, nn_pt_file):
-        self.nn_controller = Model(h1=256, h2=256)
+    def __init__(self, nn_pt_file, input_num):
+        self.num_input  = input_num
+        if input_num == 3:
+            self.nn_controller = Model(h1=256, h2=256)
+        if input_num == 4:
+            self.nn_controller = Model_3_input(h1=256, h2=256)
         self.nn_controller.eval()
         self.nn_controller.load_state_dict(torch.load(nn_pt_file))
-        self.IDM_brake = IDM(a=4, b=7, s0=5, v0=20, T=4)
+        self.IDM_brake = IDM(a=2, b=3, s0=7, v0=15, T=3)
     
-    def step_forward(self, s_vt, pv_vt, s_st, pv_st):
+    def step_forward(self, s_vt, pv_vt, s_st, pv_st, s_at, pv_at):
         ttc_i = TTCi_estimate(ego_v=s_vt, front_v=pv_vt, front_s=pv_st - s_st)
-        nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st])
+        if self.num_input == 3:
+            nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st])
+        if self.num_input == 4:
+            nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st, pv_at])
         nn_input = torch.FloatTensor(nn_input_vec.T)
         
         # Compute the neural network control
@@ -74,7 +94,6 @@ class NN_controller():
         
         # Check the if IDM braking is needed
         IDM_w = (ttc_i > 0.25) + (pv_st - s_st < 10)
-        
         ego_a_tgt = IDM_w * s_a_IDM + (1 - IDM_w) * s_a_nn
         
         return ego_a_tgt
