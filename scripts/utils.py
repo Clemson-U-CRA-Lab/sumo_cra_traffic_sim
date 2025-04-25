@@ -24,6 +24,7 @@ class IDM():
 class SUMO_vehicles():
     def __init__(self, vehicle_ID, init_s, init_lane, route_ID, lane_change_mode):
         self.ID = vehicle_ID
+        self.pv_ID = None
         self.v = 0.0
         self.a = 0.0
         self.s = init_s
@@ -39,6 +40,13 @@ class SUMO_vehicles():
     def getVehicleStates(self):
         veh_v_t = traci.vehicle.getSpeed(vehID=self.ID)
         veh_s_t = traci.vehicle.getDistance(vehID=self.ID) + self.init_dist
+        veh_a_t = traci.vehicle.getAcceleration(vehID=self.ID)
+        
+        return [veh_a_t, veh_v_t, veh_s_t]
+    
+    def getVehicleTrafficStates(self):
+        veh_v_t = traci.vehicle.getSpeed(vehID=self.ID)
+        veh_s_t = traci.vehicle.getLanePosition(vehID=self.ID)
         veh_a_t = traci.vehicle.getAcceleration(vehID=self.ID)
         
         return [veh_a_t, veh_v_t, veh_s_t]
