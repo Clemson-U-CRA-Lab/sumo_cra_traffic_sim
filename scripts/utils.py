@@ -54,8 +54,13 @@ class SUMO_vehicles():
     def assignTargetSpeed(self, tgt_spd):
         traci.vehicle.setSpeed(vehID=self.ID, speed=tgt_spd)
     
-    def assignTargetAcceleration(self, tgt_acc):
+    def assignTargetAcceleration(self, tgt_acc, v_max):
+        [_, v, _] = self.getVehicleStates()
+        if v - v_max > 0:
+            tgt_acc = 0.0
+        
         self.a = self.a + 0.5 * (tgt_acc - self.a)
+        
         traci.vehicle.setAcceleration(vehID=self.ID, acceleration=self.a, duration=0.1)
     
     def assignLaneChangeMode(self, mode):

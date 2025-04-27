@@ -140,25 +140,50 @@ if __name__ == "__main__":
         sim_t = sumo_sim_manager.step * 0.1
         print("Traffic simulation duration: " + str(round(sim_t, 1)) + " with " + str(len(sumo_sim_manager.vehID_list)) + " vehicles in traffic.")
         
+        # Check if the sim terminate
+        if len(sumo_sim_manager.vehID_list) == 0 and sim_t > 20:
+            print('Simulation Terminated')
+            break
+        
         # Update all traffic vehicles' status
         for i in range(sumo_sim_manager.num_veh):
             sumo_sim_manager.init_status_update(i)
         
+        # Initialize each vehicle states vehicles
+        veh_ctrl_input = np.zeros((6, len(sumo_sim_manager.vehID_list)))
+        
         # Update traffic vehicles inside the traffic
-        for i in range(len(sumo_sim_manager.vehID_list)):
+        for k in range(len(sumo_sim_manager.vehID_list)):
             # Get ego vehicle states
-            ego_id = int(sumo_sim_manager.vehID_list[i][3:])
+            ego_id = int(sumo_sim_manager.vehID_list[k][3:])
             ego_states = sumo_sim_manager.sumo_veh[ego_id].getVehicleStates()
             sumo_sim_manager.update_preceding_vehicle(veh_id=ego_id)
             
             # Check if preceding vehicle exists
             if sumo_sim_manager.sumo_veh[ego_id].pv_ID is not None:
-                pv_id = int(sumo_sim_manager.sumo_veh[ego_id].pv_ID[3:])
-                pv_states = sumo_sim_manager.sumo_veh[pv_id].getVehicleStates()
+                if sumo_sim_manager.sumo_veh[ego_id].pv_ID in sumo_sim_manager.vehID_list:
+                    pv_id = int(sumo_sim_manager.sumo_veh[ego_id].pv_ID[3:])
+                    pv_states = sumo_sim_manager.sumo_veh[pv_id].getVehicleStates()
+                else:
+                    pv_states = [0, 20, 100]
             else:
-                pv_states = [0, 30, 10000]
+                pv_states = [0, 20, 100]
                 
-            # Apply control to ego vehicle
-            ego_a = IDM_control.IDM_acceleration(front_v=pv_states[1], ego_v=ego_states[1], front_s=pv_states[2], ego_s=ego_states[2])
-            sumo_sim_manager.sumo_veh[ego_id].assignTargetAcceleration(tgt_acc=ego_a)
+            # Store vehicle states
+            veh_ctrl_input[:, k] = np.concatenate((ego_states, pv_states))
+        
+        # Apply control all traffic vehicles in the sim
+        if USING_IDM:
+            veh_acc_t = IDM_control.IDM_acceleration(front_v=veh_ctrl_input[4, :], ego_v=veh_ctrl_input[1, :],
+                                                     front_s=veh_ctrl_input[5, :], ego_s=veh_ctrl_input[2, :])
+        if USING_NEURAL_NETWORK:
+            veh_acc_t = FCN_control.step_forward(s_vt=veh_ctrl_input[1, :], pv_vt=veh_ctrl_input[4, :],
+                                                   s_st=veh_ctrl_input[2, :], pv_st=veh_ctrl_input[5, :],
+                                                   s_at=veh_ctrl_input[0, :], pv_at=veh_ctrl_input[3, :])
+        
+        for k in range(len(sumo_sim_manager.vehID_list)):
+            # Get ego vehicle states
+            ego_id = int(sumo_sim_manager.vehID_list[k][3:])
+            sumo_sim_manager.sumo_veh[ego_id].assignTargetAcceleration(veh_acc_t[k], 20)
+        
         time.sleep(0.01)
