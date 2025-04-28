@@ -30,6 +30,9 @@ class sumo_sim():
         self.init_a = []
         self.lane_id = []
         self.entering_type = []
+        self.traffic_density_meas = 0
+        self.density_meas_s_start = 0
+        self.density_meas_s_end = 0
 
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
@@ -85,7 +88,12 @@ class sumo_sim():
                     traffic_pv_id = np.where(traffic_veh_s_t == traffic_pv_s_min)[0]
                     if len(traffic_pv_id) > 0:
                         self.sumo_veh[veh_id].pv_ID = self.vehID_list[traffic_pv_id[0]]
-            
+    
+    def update_traffic_density_measurement(self, s_start, s_end, num_vehicles):
+        self.density_meas_s_start = s_start
+        self.density_meas_s_end = s_end
+        self.traffic_density_meas = num_vehicles
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--logging_sim", help="whether to save the simulation data", action="store_true")
@@ -134,13 +142,20 @@ if __name__ == "__main__":
     # Initialize Traffic
     CHI_init_state = getChicagoTraffic(args.scenario_id)
     sumo_sim_manager.init_scenario(CHI_init_state)
+    sim_t_record = []
     runtime_record = []
+    traffic_flow_record = []
+    power_record = []
     
     while True:
         loop_start_t = time.time()
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
+        sumo_sim_manager.update_traffic_density_measurement(s_start=1500, s_end=2250, num_vehicles=0)
         
+        power_t = 0
+        
+        sim_t_record.append(sim_t)
         # Check if the sim terminate
         if len(sumo_sim_manager.vehID_list) == 0 and sim_t > 20:
             print('Simulation Terminated')
@@ -159,6 +174,9 @@ if __name__ == "__main__":
             ego_id = int(sumo_sim_manager.vehID_list[k][3:])
             ego_states = sumo_sim_manager.sumo_veh[ego_id].getVehicleStates()
             sumo_sim_manager.update_preceding_vehicle(veh_id=ego_id)
+            if ego_states[2] > sumo_sim_manager.density_meas_s_start and ego_states[2] < sumo_sim_manager.density_meas_s_end:
+                sumo_sim_manager.traffic_density_meas += 1
+            power_t += engine_power_estimation(ego_a=ego_states[0], ego_v=ego_states[1])
             
             # Check if preceding vehicle exists
             if sumo_sim_manager.sumo_veh[ego_id].pv_ID is not None:
@@ -187,8 +205,16 @@ if __name__ == "__main__":
             ego_id = int(sumo_sim_manager.vehID_list[k][3:])
             sumo_sim_manager.sumo_veh[ego_id].assignTargetAcceleration(veh_acc_t[k], 20)
         loop_end_t = time.time()
-        print("Traffic simulation duration: " + str(round(sim_t, 1)) + " with " + str(len(sumo_sim_manager.vehID_list)) + 
-              " vehicles in traffic. The control runtime for this frame is: " + str(round((loop_end_t - loop_start_t) * 1000, 2)) + " ms")
+        
+        
+        if len(sumo_sim_manager.vehID_list) > 0:
+            print("Simulation duration: " + str(round(sim_t, 1)) + ". Num Vehicles: " + str(len(sumo_sim_manager.vehID_list)) + 
+                  " vehicles. Runtime is: " + str(round((loop_end_t - loop_start_t) * 1000, 2)) + " ms. Edge flow is: " + str(sumo_sim_manager.traffic_density_meas)
+                  + ". Avg EV power: " + str(round(power_t / (1000 * len(sumo_sim_manager.vehID_list)), 2)))
+        
+        traffic_flow_record.append(sumo_sim_manager.traffic_density_meas)
+        power_record.append(power_t)
         runtime_record.append(round((loop_end_t - loop_start_t) * 1000, 2))
         time.sleep(0.01)
+        
     print('Average runtime is: ' + str(np.mean(np.array(runtime_record))))

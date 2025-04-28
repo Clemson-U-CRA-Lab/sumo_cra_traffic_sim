@@ -32,8 +32,9 @@ class SUMO_vehicles():
         self.lane_ID = init_lane
         self.pv_s_prev = None
         self.pv_v_prev = None
-        
-        traci.vehicle.add(self.ID, route_ID, typeID = 'car', departLane=str(self.lane_ID), departPos=self.s)
+
+        traci.vehicle.add(self.ID, route_ID, typeID = 'electricCar', departLane=str(self.lane_ID), departPos=self.s)
+        traci.vehicle.setParameter(objectID=self.ID, key='vClass', value='evehicle')
         traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=lane_change_mode)
         traci.vehicle.setSpeedMode(vehID=self.ID, speedMode=96)
     
@@ -69,6 +70,10 @@ class SUMO_vehicles():
     def update_vehicle_future_states_preview(self, pv_s, pv_v):
         self.pv_s_prev = pv_s
         self.pv_v_prev = pv_v
+    
+    def get_electricity_power(self):
+        electric_consumption = traci.vehicle.getElectricityConsumption(vehID=self.ID)
+        return electric_consumption
 
 def delta_yaw_correction(delta_yaw):
     if delta_yaw > math.pi:
