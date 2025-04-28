@@ -57,7 +57,7 @@ class SUMO_vehicles():
     def assignTargetAcceleration(self, tgt_acc, v_max):
         [_, v, _] = self.getVehicleStates()
         if v - v_max > 0:
-            tgt_acc = 0.0
+            tgt_acc = np.min([tgt_acc, 0.0])
         
         self.a = self.a + 0.5 * (tgt_acc - self.a)
         

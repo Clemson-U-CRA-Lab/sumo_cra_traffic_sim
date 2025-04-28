@@ -78,7 +78,7 @@ class sumo_sim():
                 traffic_front_s_id = np.where(np.array(traffic_veh_lane_id) == ego_lane_id)[0].tolist()
                 traffic_front_s_t = traffic_veh_s_t[traffic_front_s_id]
                 
-                traffic_front_s_id = np.where(traffic_front_s_t > (ego_veh_s_t + 2))[0]
+                traffic_front_s_id = np.where(traffic_front_s_t > ego_veh_s_t)[0]
                 if len(traffic_front_s_id) > 0:
                     traffic_pv_s = traffic_front_s_t[traffic_front_s_id]
                     traffic_pv_s_min = np.min(traffic_pv_s)
@@ -124,7 +124,7 @@ if __name__ == "__main__":
         controller_name = 'Online_MPC'
         print('Use online MPC to control traffic vehicles')
     elif USING_IDM:
-        IDM_control = IDM(a=3, b=3, s0=7, v0=20, T=4)
+        IDM_control = IDM(a=3, b=3, s0=7, v0=20, T=2)
         controller_name = 'Intelligent Driving Model'
         print('Use IDM to control traffic vehicles')
     else:
@@ -134,11 +134,12 @@ if __name__ == "__main__":
     # Initialize Traffic
     CHI_init_state = getChicagoTraffic(args.scenario_id)
     sumo_sim_manager.init_scenario(CHI_init_state)
+    runtime_record = []
     
     while True:
+        loop_start_t = time.time()
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
-        print("Traffic simulation duration: " + str(round(sim_t, 1)) + " with " + str(len(sumo_sim_manager.vehID_list)) + " vehicles in traffic.")
         
         # Check if the sim terminate
         if len(sumo_sim_manager.vehID_list) == 0 and sim_t > 20:
@@ -165,10 +166,10 @@ if __name__ == "__main__":
                     pv_id = int(sumo_sim_manager.sumo_veh[ego_id].pv_ID[3:])
                     pv_states = sumo_sim_manager.sumo_veh[pv_id].getVehicleStates()
                 else:
-                    pv_states = [0, 20, 100]
+                    pv_states = [0, 20, ego_states[2] + 100]
             else:
-                pv_states = [0, 20, 100]
-                
+                pv_states = [0, 20, ego_states[2] + 100]
+            
             # Store vehicle states
             veh_ctrl_input[:, k] = np.concatenate((ego_states, pv_states))
         
@@ -185,5 +186,9 @@ if __name__ == "__main__":
             # Get ego vehicle states
             ego_id = int(sumo_sim_manager.vehID_list[k][3:])
             sumo_sim_manager.sumo_veh[ego_id].assignTargetAcceleration(veh_acc_t[k], 20)
-        
+        loop_end_t = time.time()
+        print("Traffic simulation duration: " + str(round(sim_t, 1)) + " with " + str(len(sumo_sim_manager.vehID_list)) + 
+              " vehicles in traffic. The control runtime for this frame is: " + str(round((loop_end_t - loop_start_t) * 1000, 2)) + " ms")
+        runtime_record.append(round((loop_end_t - loop_start_t) * 1000, 2))
         time.sleep(0.01)
+    print('Average runtime is: ' + str(np.mean(np.array(runtime_record))))

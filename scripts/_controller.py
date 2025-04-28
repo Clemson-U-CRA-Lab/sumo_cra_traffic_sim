@@ -25,8 +25,8 @@ class IDM():
         self.T = T
 
     def IDM_acceleration(self, front_v, ego_v, front_s, ego_s):
-        s_safe = self.s0 + ego_v * self.T + front_v * \
-            (ego_v - front_v) / (2 * (self.a * self.b)**0.5)
+        s_safe = self.s0 + ego_v * self.T + front_v * (ego_v - front_v) / (2 * (self.a * self.b)**0.5)
+        s_safe[s_safe < self.s0 + 3] = self.s0 + 3
         acc = self.a * (1 - (ego_v / self.v0) ** 4 -
                         (s_safe / (front_s - ego_s - 7)) ** 2)
         acc = np.clip(acc, -3, 3)
@@ -67,13 +67,14 @@ class Model_3_input(nn.Module):
         
 class NN_controller():
     def __init__(self, nn_pt_file, input_num):
-        self.num_input  = input_num
+        self.num_input = input_num
         if input_num == 3:
             self.nn_controller = Model(h1=256, h2=256)
         if input_num == 4:
             self.nn_controller = Model_3_input(h1=256, h2=256)
         self.nn_controller.eval()
-        self.nn_controller.load_state_dict(torch.load(nn_pt_file))
+        self.nn_controller.load_state_dict(torch.load(nn_pt_file, map_location='cpu'))
+        self.nn_controller.to('cuda')
         self.IDM_brake = IDM(a=2, b=3, s0=7, v0=15, T=3)
     
     def step_forward(self, s_vt, pv_vt, s_st, pv_st, s_at, pv_at):
@@ -82,20 +83,23 @@ class NN_controller():
             nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st])
         if self.num_input == 4:
             nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st, pv_at])
-        nn_input = torch.FloatTensor(nn_input_vec.T)
-        
+        nn_input = torch.FloatTensor(nn_input_vec.T).cuda()
         # Compute the neural network control
         with torch.no_grad():
             ego_a_nn = self.nn_controller.forward(nn_input)
             s_a_nn = ego_a_nn.flatten().tolist()
-        
+            
         # Compute intelligent driver model control
         s_a_IDM = self.IDM_brake.IDM_acceleration(front_v=pv_vt, ego_v=s_vt, front_s=pv_st, ego_s=s_st)
         
         # Check the if IDM braking is needed
-        IDM_w = (ttc_i > 0.25) + (pv_st - s_st < 10)
-        ego_a_tgt = IDM_w * s_a_IDM + (1 - IDM_w) * s_a_nn
-        
+        if len(s_a_IDM) > 0:
+            det = ((ttc_i > 0.15) + (pv_st - s_st < 15)).astype(bool)
+            IDM_w = det.astype(float)
+            ego_a_tgt = IDM_w * s_a_IDM + (1.0 - IDM_w) * s_a_nn
+        else:
+            ego_a_tgt = None
+            
         return ego_a_tgt
     
 class lookup_table_controller():
