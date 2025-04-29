@@ -167,9 +167,9 @@ if __name__ == "__main__":
             sumo_sim_manager.init_status_update(i)
         
         # Initialize each vehicle states vehicles
-        veh_ctrl_input = np.zeros((6, len(sumo_sim_manager.vehID_list)))
+        veh_ctrl_input = np.zeros((7, len(sumo_sim_manager.vehID_list)))
         
-        loop_start_t = time.time()
+        loop_start_t = time.time() # Start recording runtime
         # Update traffic vehicles inside the traffic
         for k in range(len(sumo_sim_manager.vehID_list)):
             # Get ego vehicle states
@@ -178,7 +178,7 @@ if __name__ == "__main__":
             sumo_sim_manager.update_preceding_vehicle(veh_id=ego_id)
             if ego_states[2] > sumo_sim_manager.density_meas_s_start and ego_states[2] < sumo_sim_manager.density_meas_s_end:
                 sumo_sim_manager.traffic_density_meas += 1
-            power_t += engine_power_estimation(ego_a=ego_states[0], ego_v=ego_states[1])
+            power_t += engine_power_estimation(ego_a=ego_states[0], ego_v=ego_states[1]) 
             spd_t += ego_states[1]
             
             # Check if preceding vehicle exists
@@ -192,7 +192,7 @@ if __name__ == "__main__":
                 pv_states = [0, 35, ego_states[2] + 200]
             
             # Store vehicle states
-            veh_ctrl_input[:, k] = np.concatenate((ego_states, pv_states))
+            veh_ctrl_input[0:-1, k] = np.concatenate((ego_states, pv_states))
         
         # Apply control all traffic vehicles in the sim
         if USING_IDM:
@@ -202,7 +202,7 @@ if __name__ == "__main__":
             veh_acc_t = FCN_control.step_forward(s_vt=veh_ctrl_input[1, :], pv_vt=veh_ctrl_input[4, :],
                                                    s_st=veh_ctrl_input[2, :], pv_st=veh_ctrl_input[5, :],
                                                    s_at=veh_ctrl_input[0, :], pv_at=veh_ctrl_input[3, :])
-        loop_end_t = time.time()
+        loop_end_t = time.time() # End recording runtime
         
         for k in range(len(sumo_sim_manager.vehID_list)):
             # Get ego vehicle states
@@ -217,9 +217,12 @@ if __name__ == "__main__":
             spd_t_avg = spd_t / len(sumo_sim_manager.vehID_list)
             spd_record.append(round(spd_t_avg, 2))
             
-            print("Simulation duration: " + str(round(sim_t, 1)) + ". Num Vehicles: " + str(len(sumo_sim_manager.vehID_list)) + 
-                  " vehicles. Runtime is: " + str(round((loop_end_t - loop_start_t) * 1000, 2)) + " ms. Edge flow is: " + str(sumo_sim_manager.traffic_density_meas)
-                  + ". Avg EV power: " + str(round(power_t / (1000 * len(sumo_sim_manager.vehID_list)), 2)) + ". Avg speed is: " + str(round(spd_t_avg, 2)), end='\r')
+            print("Simulation duration: " + str(round(sim_t, 1)) 
+                  + ". Num Vehicles: " + str(len(sumo_sim_manager.vehID_list)) 
+                  + " vehicles. Runtime is: " + str(round((loop_end_t - loop_start_t) * 1000, 2))
+                  + " ms. Edge flow is: " + str(sumo_sim_manager.traffic_density_meas)
+                  + ". Avg EV power: " + str(round(power_t / (1000 * len(sumo_sim_manager.vehID_list)), 2)) 
+                  + ". Avg speed is: " + str(round(spd_t_avg, 2)), end='\r')
         
         time.sleep(0.01)
     
@@ -227,19 +230,22 @@ if __name__ == "__main__":
     # Compute total power consumption
     E = np.sum(np.array(power_record) * 0.1)
     print('Total energy consumption of all vehicles: ' + str(round(E / 1000, 2)) + ' kJ.')
+    print('Average traffic flow between 2-3km is: ' + str(round(np.mean(np.array(traffic_flow_record)), 2)))
+    print('Sim duration: ' + str(sim_t_record[-1] - sim_t_record[0]) + ' s.')
     
     plt.figure(1)
-    plt.subplot(2,1,1)
+    plt.subplot(3,1,1)
     plt.plot(sim_t_record, traffic_flow_record, 'k-', linewidth=2.5)
     plt.xlabel('Time [s]')
     plt.ylabel('Traffic flow [nveh]')
+    plt.title('Scenario' + str(args.scenario_id))
     
-    plt.subplot(2,1,2)
+    plt.subplot(3,1,2)
     plt.plot(sim_t_record, spd_record, 'k-', linewidth=2.5)
     plt.xlabel('Time [s]')
     plt.ylabel('Average speed [m/s]')
     
-    plt.figure(2)
+    plt.subplot(3,1,3)
     plt.plot(sim_t_record, runtime_record, 'k-', linewidth=2.5)
     plt.xlabel('Time [s]')
     plt.ylabel('Runtime [ms]')
