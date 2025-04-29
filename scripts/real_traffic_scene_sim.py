@@ -37,6 +37,7 @@ class sumo_sim():
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
         traci.start(sumoCmd)
+        traci.gui.setSchema("View #0", "real world") 
     
     def init_scenario(self, INIT_STAT):
         self.num_veh = len(INIT_STAT)
@@ -68,7 +69,7 @@ class sumo_sim():
         
     def update_preceding_vehicle(self, veh_id):
         # Find existed vehicles in the traffic
-        if len(self.vehID_list) > 0:
+        if len(self.vehID_list) >= 0:
             ego_veh_id = "veh" + str(veh_id)
             # Check if vehicle of interest existed in the traffic
             _ego_traffic_status = len(np.where(np.array(self.vehID_list) == ego_veh_id)[0])
@@ -132,7 +133,7 @@ if __name__ == "__main__":
         controller_name = 'Online_MPC'
         print('Use online MPC to control traffic vehicles')
     elif USING_IDM:
-        IDM_control = IDM(a=3, b=3, s0=7, v0=20, T=2)
+        IDM_control = IDM(a=3, b=3, s0=7, v0=30, T=2)
         controller_name = 'Intelligent Driving Model'
         print('Use IDM to control traffic vehicles')
     else:
@@ -146,16 +147,16 @@ if __name__ == "__main__":
     runtime_record = []
     traffic_flow_record = []
     power_record = []
+    spd_record = []
     
     while True:
-        loop_start_t = time.time()
+        
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
-        sumo_sim_manager.update_traffic_density_measurement(s_start=1500, s_end=2250, num_vehicles=0)
-        
+        sumo_sim_manager.update_traffic_density_measurement(s_start=2000, s_end=3000, num_vehicles=0)
         power_t = 0
+        spd_t = 0
         
-        sim_t_record.append(sim_t)
         # Check if the sim terminate
         if len(sumo_sim_manager.vehID_list) == 0 and sim_t > 20:
             print('Simulation Terminated')
@@ -168,6 +169,7 @@ if __name__ == "__main__":
         # Initialize each vehicle states vehicles
         veh_ctrl_input = np.zeros((6, len(sumo_sim_manager.vehID_list)))
         
+        loop_start_t = time.time()
         # Update traffic vehicles inside the traffic
         for k in range(len(sumo_sim_manager.vehID_list)):
             # Get ego vehicle states
@@ -177,6 +179,7 @@ if __name__ == "__main__":
             if ego_states[2] > sumo_sim_manager.density_meas_s_start and ego_states[2] < sumo_sim_manager.density_meas_s_end:
                 sumo_sim_manager.traffic_density_meas += 1
             power_t += engine_power_estimation(ego_a=ego_states[0], ego_v=ego_states[1])
+            spd_t += ego_states[1]
             
             # Check if preceding vehicle exists
             if sumo_sim_manager.sumo_veh[ego_id].pv_ID is not None:
@@ -184,9 +187,9 @@ if __name__ == "__main__":
                     pv_id = int(sumo_sim_manager.sumo_veh[ego_id].pv_ID[3:])
                     pv_states = sumo_sim_manager.sumo_veh[pv_id].getVehicleStates()
                 else:
-                    pv_states = [0, 20, ego_states[2] + 100]
+                    pv_states = [0, 35, ego_states[2] + 200]
             else:
-                pv_states = [0, 20, ego_states[2] + 100]
+                pv_states = [0, 35, ego_states[2] + 200]
             
             # Store vehicle states
             veh_ctrl_input[:, k] = np.concatenate((ego_states, pv_states))
@@ -199,22 +202,46 @@ if __name__ == "__main__":
             veh_acc_t = FCN_control.step_forward(s_vt=veh_ctrl_input[1, :], pv_vt=veh_ctrl_input[4, :],
                                                    s_st=veh_ctrl_input[2, :], pv_st=veh_ctrl_input[5, :],
                                                    s_at=veh_ctrl_input[0, :], pv_at=veh_ctrl_input[3, :])
+        loop_end_t = time.time()
         
         for k in range(len(sumo_sim_manager.vehID_list)):
             # Get ego vehicle states
             ego_id = int(sumo_sim_manager.vehID_list[k][3:])
-            sumo_sim_manager.sumo_veh[ego_id].assignTargetAcceleration(veh_acc_t[k], 20)
-        loop_end_t = time.time()
-        
-        
+            sumo_sim_manager.sumo_veh[ego_id].assignTargetAcceleration(veh_acc_t[k], 30)
+            
         if len(sumo_sim_manager.vehID_list) > 0:
+            sim_t_record.append(sim_t)
+            traffic_flow_record.append(sumo_sim_manager.traffic_density_meas)
+            power_record.append(power_t)
+            runtime_record.append(round((loop_end_t - loop_start_t) * 1000, 2))
+            spd_t_avg = spd_t / len(sumo_sim_manager.vehID_list)
+            spd_record.append(round(spd_t_avg, 2))
+            
             print("Simulation duration: " + str(round(sim_t, 1)) + ". Num Vehicles: " + str(len(sumo_sim_manager.vehID_list)) + 
                   " vehicles. Runtime is: " + str(round((loop_end_t - loop_start_t) * 1000, 2)) + " ms. Edge flow is: " + str(sumo_sim_manager.traffic_density_meas)
-                  + ". Avg EV power: " + str(round(power_t / (1000 * len(sumo_sim_manager.vehID_list)), 2)))
+                  + ". Avg EV power: " + str(round(power_t / (1000 * len(sumo_sim_manager.vehID_list)), 2)) + ". Avg speed is: " + str(round(spd_t_avg, 2)), end='\r')
         
-        traffic_flow_record.append(sumo_sim_manager.traffic_density_meas)
-        power_record.append(power_t)
-        runtime_record.append(round((loop_end_t - loop_start_t) * 1000, 2))
         time.sleep(0.01)
-        
+    
     print('Average runtime is: ' + str(np.mean(np.array(runtime_record))))
+    # Compute total power consumption
+    E = np.sum(np.array(power_record) * 0.1)
+    print('Total energy consumption of all vehicles: ' + str(round(E / 1000, 2)) + ' kJ.')
+    
+    plt.figure(1)
+    plt.subplot(2,1,1)
+    plt.plot(sim_t_record, traffic_flow_record, 'k-', linewidth=2.5)
+    plt.xlabel('Time [s]')
+    plt.ylabel('Traffic flow [nveh]')
+    
+    plt.subplot(2,1,2)
+    plt.plot(sim_t_record, spd_record, 'k-', linewidth=2.5)
+    plt.xlabel('Time [s]')
+    plt.ylabel('Average speed [m/s]')
+    
+    plt.figure(2)
+    plt.plot(sim_t_record, runtime_record, 'k-', linewidth=2.5)
+    plt.xlabel('Time [s]')
+    plt.ylabel('Runtime [ms]')
+    
+    plt.show()
