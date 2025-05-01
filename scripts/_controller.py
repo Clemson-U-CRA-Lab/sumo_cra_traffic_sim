@@ -37,7 +37,7 @@ class PCC_MPC_controller():
         self.s = 0.0
         self.v = 0.0
         self.a = 0.0
-        self.svs = PCC(dirname, self.s, self.v, self.a, v_max=30)
+        self.svs = PCC(dirname, self.s, self.v, self.a, v_max=35)
 
 class Model(nn.Module):
     def __init__(self, in_features=3, h1=256, h2=256, h3=32, out_features=1):

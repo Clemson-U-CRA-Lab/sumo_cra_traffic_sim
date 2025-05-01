@@ -37,7 +37,7 @@ class sumo_sim():
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
         traci.start(sumoCmd)
-        traci.gui.setSchema("View #0", "real world") 
+        traci.gui.setSchema("View #0", "real world")
     
     def init_scenario(self, INIT_STAT):
         self.num_veh = len(INIT_STAT)
@@ -159,6 +159,7 @@ if __name__ == "__main__":
         
         # Check if the sim terminate
         if len(sumo_sim_manager.vehID_list) == 0 and sim_t > 20:
+            print('\n')
             print('Simulation Terminated')
             break
         
@@ -187,9 +188,9 @@ if __name__ == "__main__":
                     pv_id = int(sumo_sim_manager.sumo_veh[ego_id].pv_ID[3:])
                     pv_states = sumo_sim_manager.sumo_veh[pv_id].getVehicleStates()
                 else:
-                    pv_states = [0, 35, ego_states[2] + 200]
+                    pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
             else:
-                pv_states = [0, 35, ego_states[2] + 200]
+                pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
             
             # Store vehicle states
             veh_ctrl_input[0:-1, k] = np.concatenate((ego_states, pv_states))
@@ -202,6 +203,14 @@ if __name__ == "__main__":
             veh_acc_t = FCN_control.step_forward(s_vt=veh_ctrl_input[1, :], pv_vt=veh_ctrl_input[4, :],
                                                    s_st=veh_ctrl_input[2, :], pv_st=veh_ctrl_input[5, :],
                                                    s_at=veh_ctrl_input[0, :], pv_at=veh_ctrl_input[3, :])
+        if USING_ONLINE_MPC:
+            veh_acc_t = []
+            for i in range(len(sumo_sim_manager.vehID_list)):
+                mpc_acc_t = traffic_online_MPC_control_step(veh_0_acc_t=veh_ctrl_input[3, i], veh_0_spd_t=veh_ctrl_input[4, i], veh_0_dist_t=veh_ctrl_input[5, i],
+                                                            veh_1_acc_t=veh_ctrl_input[0, i], veh_1_spd_t=veh_ctrl_input[1, i], veh_1_dist_t=veh_ctrl_input[2, i],
+                                                            sim_t=sim_t, online_MPC_control=online_MPC_control, record_t=[], front_v_t=[], mpc_dt=0.5,
+                                                            pv_object=None, ego_object=None, leading_preview=False)
+                veh_acc_t.append(mpc_acc_t[0])
         loop_end_t = time.time() # End recording runtime
         
         for k in range(len(sumo_sim_manager.vehID_list)):

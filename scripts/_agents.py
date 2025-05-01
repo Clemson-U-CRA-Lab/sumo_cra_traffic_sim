@@ -155,9 +155,9 @@ class PCC(_vehicle):
 
         # Predict PV motion and then write to inputs
         if USING_PREVIEW:
-            self.setPred(t=t, pv_state=pv_state, cycle_ss=cycle_ss, cycle_vs=cycle_vs, cycle_dt=cycle_dt, n_pred_steps=30)
+            self.setPred(t=t, pv_state=pv_state, cycle_ss=cycle_ss, cycle_vs=cycle_vs, cycle_dt=cycle_dt, n_pred_steps=50)
         else:
-            self.predAcc(t=t, pv_state=pv_state, v_max=30)
+            self.predAcc(t=t, pv_state=pv_state, v_max=35)
         
         # Ego vehicle state constraints
         self.api.inputs_p.contents.pos_max = s_max
