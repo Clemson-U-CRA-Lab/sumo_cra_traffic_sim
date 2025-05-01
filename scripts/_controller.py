@@ -29,7 +29,7 @@ class IDM():
         s_safe[s_safe < self.s0 + 3] = self.s0 + 3
         acc = self.a * (1 - (ego_v / self.v0) ** 4 -
                         (s_safe / (front_s - ego_s - 7)) ** 2)
-        acc = np.clip(acc, -3, 3)
+        acc = np.clip(acc, -5, 3)
         return acc
     
 class PCC_MPC_controller():
@@ -75,7 +75,7 @@ class NN_controller():
         self.nn_controller.eval()
         self.nn_controller.load_state_dict(torch.load(nn_pt_file, map_location='cpu'))
         self.nn_controller.to('cuda')
-        self.IDM_brake = IDM(a=2, b=3, s0=7, v0=30, T=3)
+        self.IDM_brake = IDM(a=3, b=5, s0=8, v0=30, T=5)
     
     def step_forward(self, s_vt, pv_vt, s_st, pv_st, s_at, pv_at):
         ttc_i = TTCi_estimate(ego_v=s_vt, front_v=pv_vt, front_s=pv_st - s_st)

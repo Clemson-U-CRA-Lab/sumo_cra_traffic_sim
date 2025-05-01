@@ -7,6 +7,7 @@ import traci
 import traci.constants as tc
 import matplotlib.pyplot as plt
 from utils import *
+from _i85_traffic_info import *
 from _controller import *
 from _constants import *
 from _chicago import *
@@ -107,6 +108,7 @@ if __name__ == "__main__":
     parent_dir = os.path.abspath(os.path.join(current_dirname, os.pardir))
     sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
     sumo_sim_manager.start_Sumo()
+    traffic_light_manager = SUMO_Traffic_Light(s_TL=TL_s, t_TL=TL_timing, status_TL=TL_status, red_duration=25, amber_duration=2.5, green_duration=45)
     
     # Traffic control setting
     if args.control_type == 'MPC':
@@ -133,7 +135,7 @@ if __name__ == "__main__":
         controller_name = 'Online_MPC'
         print('Use online MPC to control traffic vehicles')
     elif USING_IDM:
-        IDM_control = IDM(a=3, b=3, s0=7, v0=30, T=2)
+        IDM_control = IDM(a=2, b=5, s0=8, v0=30, T=5)
         controller_name = 'Intelligent Driving Model'
         print('Use IDM to control traffic vehicles')
     else:
@@ -150,7 +152,6 @@ if __name__ == "__main__":
     spd_record = []
     
     while True:
-        
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         sumo_sim_manager.update_traffic_density_measurement(s_start=2000, s_end=3000, num_vehicles=0)
@@ -167,6 +168,10 @@ if __name__ == "__main__":
         for i in range(sumo_sim_manager.num_veh):
             sumo_sim_manager.init_status_update(i)
         
+        # Update all traffic light information
+        for j in range(num_TL):
+            traffic_light_manager.TL_update(TL_id=j)
+        
         # Initialize each vehicle states vehicles
         veh_ctrl_input = np.zeros((7, len(sumo_sim_manager.vehID_list)))
         
@@ -176,7 +181,9 @@ if __name__ == "__main__":
             # Get ego vehicle states
             ego_id = int(sumo_sim_manager.vehID_list[k][3:])
             ego_states = sumo_sim_manager.sumo_veh[ego_id].getVehicleStates()
+            sumo_sim_manager.sumo_veh[ego_id].update_preceding_traffic_light(TL_s=TL_s)
             sumo_sim_manager.update_preceding_vehicle(veh_id=ego_id)
+            
             if ego_states[2] > sumo_sim_manager.density_meas_s_start and ego_states[2] < sumo_sim_manager.density_meas_s_end:
                 sumo_sim_manager.traffic_density_meas += 1
             power_t += engine_power_estimation(ego_a=ego_states[0], ego_v=ego_states[1]) 
@@ -187,10 +194,23 @@ if __name__ == "__main__":
                 if sumo_sim_manager.sumo_veh[ego_id].pv_ID in sumo_sim_manager.vehID_list:
                     pv_id = int(sumo_sim_manager.sumo_veh[ego_id].pv_ID[3:])
                     pv_states = sumo_sim_manager.sumo_veh[pv_id].getVehicleStates()
-                else:
-                    pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
+                    # Check if stop in front of the traffic light is needed
+                    if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] is not None:
+                        if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] == 0:
+                            if sumo_sim_manager.sumo_veh[ego_id].pTL_s < 200:
+                                pv_states = [0, 0, ego_states[2] + sumo_sim_manager.sumo_veh[ego_id].pTL_s]
+                # else:
+                #     if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] is not None:
+                #         if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] == 0:
+                #             pv_states = [0, 0, ego_states[2] + sumo_sim_manager.sumo_veh[ego_id].pTL_s]
+                #         else:
+                #             pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
             else:
-                pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
+                if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] is not None:
+                    if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] == 0:
+                        pv_states = [0, 0, ego_states[2] + sumo_sim_manager.sumo_veh[ego_id].pTL_s]
+                    else:
+                        pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
             
             # Store vehicle states
             veh_ctrl_input[0:-1, k] = np.concatenate((ego_states, pv_states))

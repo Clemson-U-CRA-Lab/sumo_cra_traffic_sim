@@ -21,6 +21,45 @@ class IDM():
         acc = np.clip(acc, -6, 4)
         return acc
 
+class SUMO_Traffic_Light():
+    def __init__(self, s_TL, t_TL, status_TL, red_duration, amber_duration, green_duration):
+        self.s_TL = s_TL
+        self.status_TL = status_TL
+        self.TL_timing = t_TL
+        self.RD_duration = red_duration
+        self.AM_duration = amber_duration
+        self.GR_duration = green_duration
+    
+    def TL_update(self, TL_id):
+        # Update traffic signal timing
+        TL_t = self.TL_timing[TL_id]
+        # Check the status and duration
+        TL_status = self.status_TL[0]
+        # Update traffic light status
+        if TL_status == 0:
+            if TL_t > self.RD_duration:
+                TL_status = 2
+                TL_t = 0.0
+            else:
+                TL_t += 0.1
+        elif TL_status == 1:
+            if TL_t > self.AM_duration:
+                TL_status = 0
+                TL_t = 0.0
+            else:
+                TL_t += 0.1
+        elif TL_status == 2:
+            if TL_t > self.GR_duration:
+                TL_status = 1
+                TL_t = 0.0
+            else:
+                TL_t += 0.1
+        else:
+            print("Something is wrong about this traffic light...(-_-`)")
+            
+        self.TL_timing[TL_id] = TL_t
+        self.status_TL[TL_id] = TL_status
+
 class SUMO_vehicles():
     def __init__(self, vehicle_ID, init_s, init_lane, route_ID, lane_change_mode):
         self.ID = vehicle_ID
@@ -30,13 +69,27 @@ class SUMO_vehicles():
         self.s = init_s
         self.init_dist = init_s
         self.lane_ID = init_lane
+        self.pTL_s = None
+        self.pTL_id = None
         self.pv_s_prev = None
         self.pv_v_prev = None
 
         traci.vehicle.add(self.ID, route_ID, typeID = 'electricCar', departLane=str(self.lane_ID), departPos=self.s)
         traci.vehicle.setParameter(objectID=self.ID, key='vClass', value='evehicle')
         traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=lane_change_mode)
-        traci.vehicle.setSpeedMode(vehID=self.ID, speedMode=96)
+        #traci.vehicle.setSpeedMode(vehID=self.ID, speedMode=96)
+    
+    def update_preceding_traffic_light(self, TL_s):
+        # Find the traffic that is in front of the traffic light
+        [_, _, ego_s] = self.getVehicleStates()
+        TL_s = np.array(TL_s)
+        TL_id = np.where(TL_s > ego_s)[0]
+        if len(TL_id) > 0:
+            self.pTL_id = TL_id[0].tolist()
+            self.pTL_s = TL_s[TL_id[0]].tolist() - ego_s
+        else:
+            self.pTL_s = None
+            self.pTL_id = None
     
     def getVehicleStates(self):
         veh_v_t = traci.vehicle.getSpeed(vehID=self.ID)
