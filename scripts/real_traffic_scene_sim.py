@@ -179,7 +179,7 @@ if __name__ == "__main__":
         # Initialize each vehicle states vehicles
         veh_ctrl_input = np.zeros((7, len(sumo_sim_manager.vehID_list)))
         
-        loop_start_t = time.time() # Start recording runtime
+        
         # Update traffic vehicles inside the traffic
         for k in range(len(sumo_sim_manager.vehID_list)):
             # Get ego vehicle states
@@ -222,8 +222,9 @@ if __name__ == "__main__":
                     pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
             
             # Store vehicle states
-            veh_ctrl_input[0:-1, k] = np.concatenate((ego_states, pv_states))
+            veh_ctrl_input[0:-1, k] = np.concatenate((ego_states, pv_states))\
         
+        loop_start_t = time.time() # Start recording runtime
         # Apply control all traffic vehicles in the sim
         if USING_IDM:
             veh_acc_t = IDM_control.IDM_acceleration(front_v=veh_ctrl_input[4, :], ego_v=veh_ctrl_input[1, :],
@@ -251,10 +252,12 @@ if __name__ == "__main__":
             sim_t_record.append(sim_t)
             traffic_flow_record.append(sumo_sim_manager.traffic_density_meas)
             power_record.append(power_t)
-            runtime_record.append(round((loop_end_t - loop_start_t) * 1000, 2))
+            runtime_record.append(round((loop_end_t - loop_start_t) * 1000, 3))
             spd_t_avg = spd_t / len(sumo_sim_manager.vehID_list)
             spd_record.append(round(spd_t_avg, 2))
-            print("Simulation duration: ", str(round(sim_t, 1)), ". Trafficlight status: ", traffic_light_manager.status_TL, 'Num vehicles: ', len(sumo_sim_manager.vehID_list), end='\r')
+            print("Simulation duration: ", str(round(sim_t, 1)), "Trafficlight status: ", traffic_light_manager.status_TL, 
+                  'Num vehicles: ', len(sumo_sim_manager.vehID_list), "Runtime: ", str(round((loop_end_t - loop_start_t) * 1000, 3)), 
+                  end="\r", flush=True)
         time.sleep(0.01)
     
     print('Average runtime is: ' + str(np.mean(np.array(runtime_record))))
