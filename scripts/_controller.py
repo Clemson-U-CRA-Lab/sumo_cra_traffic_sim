@@ -28,7 +28,7 @@ class IDM():
         s_safe = self.s0 + ego_v * self.T + front_v * (ego_v - front_v) / (2 * (self.a * self.b)**0.5)
         s_safe[s_safe < self.s0 + 3] = self.s0 + 3
         acc = self.a * (1 - (ego_v / self.v0) ** 4 -
-                        (s_safe / (front_s - ego_s - 7)) ** 2)
+                        (s_safe / (front_s - ego_s - self.s0)) ** 2)
         acc = np.clip(acc, -5, 3)
         return acc
     

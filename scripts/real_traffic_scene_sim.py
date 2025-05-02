@@ -16,7 +16,8 @@ import random
 
 class sumo_sim():
     def __init__(self, sumo_config_name):
-        self.sumoBinary = "/usr/bin/sumo-gui"
+        self.sumoGUIBinary = "/usr/bin/sumo-gui"
+        self.sumoBinary = "sumo"
         self.sumoconfig = sumo_config_name
         self.vehID_list = []
         self.num_veh = 0
@@ -35,8 +36,11 @@ class sumo_sim():
         self.density_meas_s_start = 0
         self.density_meas_s_end = 0
 
-    def start_Sumo(self):
-        sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
+    def start_Sumo(self, open_gui=True):
+        if open_gui:
+            sumoCmd = [self.sumoGUIBinary, "-c", self.sumoconfig]
+        else:
+            sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
         traci.start(sumoCmd)
         traci.gui.setSchema("View #0", "real world")
     
@@ -107,8 +111,8 @@ if __name__ == "__main__":
     current_dirname = os.path.dirname(__file__)
     parent_dir = os.path.abspath(os.path.join(current_dirname, os.pardir))
     sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
-    sumo_sim_manager.start_Sumo()
-    traffic_light_manager = SUMO_Traffic_Light(s_TL=TL_s, t_TL=TL_timing, status_TL=TL_status, red_duration=25, amber_duration=2.5, green_duration=45)
+    sumo_sim_manager.start_Sumo(open_gui=True)
+    traffic_light_manager = SUMO_Traffic_Light(s_TL=TL_s, t_TL=TL_timing, status_TL=TL_status, red_duration=30, amber_duration=2.5, green_duration=30)
     
     # Traffic control setting
     if args.control_type == 'MPC':
@@ -135,7 +139,7 @@ if __name__ == "__main__":
         controller_name = 'Online_MPC'
         print('Use online MPC to control traffic vehicles')
     elif USING_IDM:
-        IDM_control = IDM(a=2, b=5, s0=8, v0=30, T=5)
+        IDM_control = IDM(a=3, b=5, s0=8, v0=30, T=6)
         controller_name = 'Intelligent Driving Model'
         print('Use IDM to control traffic vehicles')
     else:
@@ -190,27 +194,32 @@ if __name__ == "__main__":
             spd_t += ego_states[1]
             
             # Check if preceding vehicle exists
-            if sumo_sim_manager.sumo_veh[ego_id].pv_ID is not None:
+            if sumo_sim_manager.sumo_veh[ego_id].pv_ID is not None: # Check if the vehicle is the leading vehicle
                 if sumo_sim_manager.sumo_veh[ego_id].pv_ID in sumo_sim_manager.vehID_list:
                     pv_id = int(sumo_sim_manager.sumo_veh[ego_id].pv_ID[3:])
                     pv_states = sumo_sim_manager.sumo_veh[pv_id].getVehicleStates()
+                    
                     # Check if stop in front of the traffic light is needed
-                    if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] is not None:
+                    if sumo_sim_manager.sumo_veh[ego_id].pTL_id is not None:
                         if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] == 0:
-                            if sumo_sim_manager.sumo_veh[ego_id].pTL_s < 200:
+                            if sumo_sim_manager.sumo_veh[ego_id].pTL_s < pv_states[2] - ego_states[2] + 15:
                                 pv_states = [0, 0, ego_states[2] + sumo_sim_manager.sumo_veh[ego_id].pTL_s]
-                # else:
-                #     if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] is not None:
-                #         if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] == 0:
-                #             pv_states = [0, 0, ego_states[2] + sumo_sim_manager.sumo_veh[ego_id].pTL_s]
-                #         else:
-                #             pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
+                            else:
+                                pv_states = sumo_sim_manager.sumo_veh[pv_id].getVehicleStates()
+                        else:
+                            pv_states = sumo_sim_manager.sumo_veh[pv_id].getVehicleStates()
+                    else:
+                        pv_states = sumo_sim_manager.sumo_veh[pv_id].getVehicleStates()
+                else:
+                    pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
             else:
-                if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] is not None:
+                if sumo_sim_manager.sumo_veh[ego_id].pTL_id is not None: # Check if any traffic light is ahead of the leading vehicle
                     if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] == 0:
                         pv_states = [0, 0, ego_states[2] + sumo_sim_manager.sumo_veh[ego_id].pTL_s]
                     else:
                         pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
+                else:
+                    pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
             
             # Store vehicle states
             veh_ctrl_input[0:-1, k] = np.concatenate((ego_states, pv_states))
@@ -230,7 +239,7 @@ if __name__ == "__main__":
                                                             veh_1_acc_t=veh_ctrl_input[0, i], veh_1_spd_t=veh_ctrl_input[1, i], veh_1_dist_t=veh_ctrl_input[2, i],
                                                             sim_t=sim_t, online_MPC_control=online_MPC_control, record_t=[], front_v_t=[], mpc_dt=0.5,
                                                             pv_object=None, ego_object=None, leading_preview=False)
-                veh_acc_t.append(mpc_acc_t[0])
+                veh_acc_t.append(mpc_acc_t)
         loop_end_t = time.time() # End recording runtime
         
         for k in range(len(sumo_sim_manager.vehID_list)):
@@ -245,14 +254,7 @@ if __name__ == "__main__":
             runtime_record.append(round((loop_end_t - loop_start_t) * 1000, 2))
             spd_t_avg = spd_t / len(sumo_sim_manager.vehID_list)
             spd_record.append(round(spd_t_avg, 2))
-            
-            print("Simulation duration: " + str(round(sim_t, 1)) 
-                  + ". Num Vehicles: " + str(len(sumo_sim_manager.vehID_list)) 
-                  + " vehicles. Runtime is: " + str(round((loop_end_t - loop_start_t) * 1000, 2))
-                  + " ms. Edge flow is: " + str(sumo_sim_manager.traffic_density_meas)
-                  + ". Avg EV power: " + str(round(power_t / (1000 * len(sumo_sim_manager.vehID_list)), 2)) 
-                  + ". Avg speed is: " + str(round(spd_t_avg, 2)), end='\r')
-        
+            print("Simulation duration: ", str(round(sim_t, 1)), ". Trafficlight status: ", traffic_light_manager.status_TL, 'Num vehicles: ', len(sumo_sim_manager.vehID_list), end='\r')
         time.sleep(0.01)
     
     print('Average runtime is: ' + str(np.mean(np.array(runtime_record))))

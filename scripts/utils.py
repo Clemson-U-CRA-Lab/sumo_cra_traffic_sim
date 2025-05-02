@@ -34,25 +34,28 @@ class SUMO_Traffic_Light():
         # Update traffic signal timing
         TL_t = self.TL_timing[TL_id]
         # Check the status and duration
-        TL_status = self.status_TL[0]
+        TL_status = self.status_TL[TL_id]
         # Update traffic light status
         if TL_status == 0:
             if TL_t > self.RD_duration:
                 TL_status = 2
                 TL_t = 0.0
             else:
+                TL_status = 0
                 TL_t += 0.1
         elif TL_status == 1:
             if TL_t > self.AM_duration:
                 TL_status = 0
                 TL_t = 0.0
             else:
+                TL_status = 1
                 TL_t += 0.1
         elif TL_status == 2:
             if TL_t > self.GR_duration:
                 TL_status = 1
                 TL_t = 0.0
             else:
+                TL_status = 2
                 TL_t += 0.1
         else:
             print("Something is wrong about this traffic light...(-_-`)")
@@ -255,6 +258,8 @@ def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
                                     front_v_t, mpc_dt, pv_object, ego_object, 
                                     leading_preview=False):
     
+    IDM_brake = IDM(a=3, b=5, s0=8, v0=30, T=5)
+    
     if leading_preview:
         cycle_vs, cycle_ss = driving_cycle_state_preview_searching(sim_t=sim_t, record_t=record_t, front_v_t=front_v_t, mpc_dt=mpc_dt, front_s_init=veh_0_dist_t)
     else:
@@ -266,7 +271,15 @@ def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
     if leading_preview:
         ego_object.update_vehicle_future_states_preview(np.array(veh_1_pred_s) - 5.0, veh_1_pred_v)
     
-    return [a_MPC]
+    # Compute intelligent driver model control
+    ttc_i = TTCi_estimate(ego_v=veh_1_spd_t, front_v=veh_0_spd_t, front_s=veh_0_dist_t - veh_1_dist_t)
+    s_a_IDM = IDM_brake.IDM_acceleration(front_v=veh_0_spd_t, ego_v=veh_1_spd_t, front_s=veh_0_dist_t, ego_s=veh_1_dist_t)
+    
+    det = ((ttc_i > 0.15) + (veh_0_dist_t - veh_1_dist_t < 15)).astype(bool)
+    IDM_w = det.astype(float)
+    ego_a_tgt = IDM_w * s_a_IDM + (1.0 - IDM_w) * a_MPC
+    
+    return ego_a_tgt
 
 def engine_power_estimation(ego_v, ego_a):
     m = 2218 # Vehicle weights
