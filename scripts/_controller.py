@@ -29,7 +29,7 @@ class IDM():
         s_safe[s_safe < self.s0 + 3] = self.s0 + 3
         acc = self.a * (1 - (ego_v / self.v0) ** 4 -
                         (s_safe / (front_s - ego_s - self.s0)) ** 2)
-        acc = np.clip(acc, -5, 3)
+        acc = np.clip(acc, -3, 3)
         return acc
     
 class PCC_MPC_controller():
@@ -75,12 +75,24 @@ class NN_controller():
         self.nn_controller.eval()
         self.nn_controller.load_state_dict(torch.load(nn_pt_file, map_location='cpu'))
         self.nn_controller.to('cuda')
-        self.IDM_brake = IDM(a=3, b=5, s0=8, v0=30, T=5)
+        self.IDM_brake = IDM(a=3, b=3, s0=5, v0=20, T=4)
     
-    def step_forward(self, s_vt, pv_vt, s_st, pv_st, s_at, pv_at):
+    def step_forward(self, s_vt, pv_vt, s_st, pv_st, s_at, pv_at, use_prediction_horizon, sim_t):
         ttc_i = TTCi_estimate(ego_v=s_vt, front_v=pv_vt, front_s=pv_st - s_st)
         if self.num_input == 3:
-            nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st])
+            if use_prediction_horizon:
+                # Calculate the prediction horizon length
+                pv_s_end = np.zeros(pv_st.shape)
+                pv_vt_pred = pv_vt
+                pv_st_pred = pv_st
+                for i in range(50):
+                    pv_vt_pred = pv_vt_pred + pv_at * 0.5
+                    pv_vt_pred = np.clip(pv_vt_pred, 0, np.Inf)
+                    pv_st_pred = pv_st_pred + pv_vt_pred * 0.5
+                pv_s_end = pv_st_pred - pv_st
+                nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_s_end])
+            else:
+                nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st])
         if self.num_input == 4:
             nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st, pv_at])
         nn_input = torch.FloatTensor(nn_input_vec.T).cuda()
@@ -94,8 +106,10 @@ class NN_controller():
         
         # Check the if IDM braking is needed
         if len(s_a_IDM) > 0:
-            det = ((ttc_i > 0.15) + (pv_st - s_st < 15)).astype(bool)
+            det = ((ttc_i > 0.15) + (pv_st - s_st < 10)).astype(bool)
             IDM_w = det.astype(float)
+            if IDM_w:
+                print('IDM brake on at time: ' ,  sim_t)
             ego_a_tgt = IDM_w * s_a_IDM + (1.0 - IDM_w) * s_a_nn
         else:
             ego_a_tgt = None

@@ -31,7 +31,7 @@ class sumo_sim():
         self.num_veh = num_vehicle
         self.sumo_veh = [None]*num_vehicle
         for i in range(self.num_veh):
-            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 30 - 10 * i, init_lane=0, route_ID="route1", lane_change_mode=0)
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 30 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0)
 
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
@@ -99,6 +99,7 @@ if __name__=="__main__":
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
+    # nn_pt_filename = dirname + '/traffic_following_control_4_input_best.pt'
     nn_pt_filename = dirname + '/traffic_following_control.pt'
     
     # Setup controller
@@ -131,7 +132,7 @@ if __name__=="__main__":
     lead_s = 325.0
     end_s = 0.0
     
-    while sumo_sim_manager.step * 0.1 < record_t[-1] + 15:
+    while sumo_sim_manager.step * 0.1 < record_t[-1] + 25:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
@@ -151,7 +152,7 @@ if __name__=="__main__":
         pv_at_traffic = []
         
         for i in range(0, num_veh):
-            if i == 0 or i == int(num_veh/2):
+            if i == 0: #or i == int(num_veh/2):
                 # Get leading vehicle speed
                 v_lead_id = np.argmin(np.abs([record_t - sim_t]))
                 v_tgt_lead = front_v_t[v_lead_id] #+ 2.0 * (random.random() - 0.5)
@@ -201,18 +202,19 @@ if __name__=="__main__":
             acc = acc_traffic_step_t[0]
             
             # Assign the acceleration to ego vehicle
-            sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc)
+            sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc, v_max=15)
         
         if USING_NEURAL_NETWORK:
             acc_traffic_step_t = FCN_control.step_forward(s_vt=np.array(s_vt_traffic), pv_vt=np.array(pv_vt_traffic), 
                                                           s_st=np.array(s_st_traffic), pv_st=np.array(pv_st_traffic),
-                                                          s_at=np.array(s_at_traffic), pv_at=np.array(pv_at_traffic))
-            sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0])
+                                                          s_at=np.array(s_at_traffic), pv_at=np.array(pv_at_traffic), 
+                                                          use_prediction_horizon=True, sim_t=sim_t)
+            sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0], v_max=15)
             for i in range(1, num_veh):
                 if i < int(num_veh / 2):
-                    sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1])
+                    sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1], v_max=15)
                 elif i > int(num_veh / 2):
-                    sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-2])
+                    sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-2], v_max=15)
                 else:
                     continue
         
@@ -220,7 +222,7 @@ if __name__=="__main__":
         Power_t.append(P_t)
         ego_state_t = sumo_sim_manager.sumo_veh[1].getVehicleStates()
         pv_state_t = sumo_sim_manager.sumo_veh[0].getVehicleStates()
-                
+        
         ego_v.append(ego_state_t[1])
         pv_v.append(pv_state_t[1])
         
@@ -236,7 +238,7 @@ if __name__=="__main__":
         runtime_record.append(time.time() - start_t)
         
         if args.logging_sim:
-            data_logger(sim_t=sim_t, ego_a=acc, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
+            data_logger(sim_t=sim_t, ego_a=veh_0_acc_t, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
                         pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename= args.leading_speed_profile + "_" + controller_name + ".csv")
         
         time.sleep(0.01)
@@ -271,6 +273,7 @@ if __name__=="__main__":
     plt.figure(3)
     plt.plot(veh_sim_t, ego_v, '-k')
     plt.plot(veh_sim_t, pv_v, '-b')
+    plt.legend(['Ego vehicle', 'Preceding vehicle'])
     plt.xlabel('Time [s]', fontsize=20)
     plt.ylabel('Ego vehicle speed [m/s]', fontsize=20)
     

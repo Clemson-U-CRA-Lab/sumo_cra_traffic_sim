@@ -80,7 +80,7 @@ class SUMO_vehicles():
         traci.vehicle.add(self.ID, route_ID, typeID = 'electricCar', departLane=str(self.lane_ID), departPos=self.s)
         traci.vehicle.setParameter(objectID=self.ID, key='vClass', value='evehicle')
         traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=lane_change_mode)
-        #traci.vehicle.setSpeedMode(vehID=self.ID, speedMode=96)
+        traci.vehicle.setSpeedMode(vehID=self.ID, speedMode=96)
     
     def update_preceding_traffic_light(self, TL_s):
         # Find the traffic that is in front of the traffic light
@@ -116,7 +116,7 @@ class SUMO_vehicles():
         if v - v_max > 0:
             tgt_acc = np.min([tgt_acc, 0.0])
         
-        self.a = self.a + 0.5 * (tgt_acc - self.a)
+        self.a = self.a + 1.0 * (tgt_acc - self.a)
         
         traci.vehicle.setAcceleration(vehID=self.ID, acceleration=self.a, duration=0.1)
     
@@ -272,14 +272,14 @@ def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
         ego_object.update_vehicle_future_states_preview(np.array(veh_1_pred_s) - 5.0, veh_1_pred_v)
     
     # Compute intelligent driver model control
-    ttc_i = TTCi_estimate(ego_v=veh_1_spd_t, front_v=veh_0_spd_t, front_s=veh_0_dist_t - veh_1_dist_t)
-    s_a_IDM = IDM_brake.IDM_acceleration(front_v=veh_0_spd_t, ego_v=veh_1_spd_t, front_s=veh_0_dist_t, ego_s=veh_1_dist_t)
+    # ttc_i = TTCi_estimate(ego_v=veh_1_spd_t, front_v=veh_0_spd_t, front_s=veh_0_dist_t - veh_1_dist_t)
+    # s_a_IDM = IDM_brake.IDM_acceleration(front_v=veh_0_spd_t, ego_v=veh_1_spd_t, front_s=veh_0_dist_t, ego_s=veh_1_dist_t)
+    # 
+    # det = ((ttc_i > 0.15) + (veh_0_dist_t - veh_1_dist_t < 15)).astype(bool)
+    # IDM_w = det.astype(float)
+    # ego_a_tgt = IDM_w * s_a_IDM + (1.0 - IDM_w) * a_MPC
     
-    det = ((ttc_i > 0.15) + (veh_0_dist_t - veh_1_dist_t < 15)).astype(bool)
-    IDM_w = det.astype(float)
-    ego_a_tgt = IDM_w * s_a_IDM + (1.0 - IDM_w) * a_MPC
-    
-    return ego_a_tgt
+    return [a_MPC]
 
 def engine_power_estimation(ego_v, ego_a):
     m = 2218 # Vehicle weights

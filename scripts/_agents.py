@@ -67,7 +67,7 @@ class PCC(_vehicle):
         self.api = cpp_api(dirname + '/' + libraryname)
 
     def predAcc(self, t, pv_state, v_max):
-        dt_pred = 0.50 # Time stepsize between prediction stages [s]
+        dt_pred = 0.1 # Time stepsize between prediction stages [s]
         t_pred = t # [s]
         
         k = 0 # First index is current PV states

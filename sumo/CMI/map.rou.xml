@@ -11,7 +11,11 @@
 
 <routes>
     <!-- Define vehicle types -->
-    <vType id="car" length="5" maxSpeed="25"/>
+    <vType id="electricCar" vClass="passenger" length="4.7" maxSpeed="30">
+        <param key="device.battery.capacity" value="80" /> <!-- kWh -->
+        <param key="device.battery.actualBatteryCapacity" value="80" /> <!-- start full -->
+        <param key="device.battery.powerConsumption" value="0.2" /> <!-- Wh per meter -->
+    </vType>
 
     <!-- Define routes -->
     <route id="route1" edges="76146229#1"/>
