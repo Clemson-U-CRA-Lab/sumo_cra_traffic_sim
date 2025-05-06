@@ -238,7 +238,7 @@ if __name__=="__main__":
         runtime_record.append(time.time() - start_t)
         
         if args.logging_sim:
-            data_logger(sim_t=sim_t, ego_a=veh_0_acc_t, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
+            data_logger(sim_t=sim_t, ego_a=veh_1_acc_t, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
                         pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename= args.leading_speed_profile + "_" + controller_name + ".csv")
         
         time.sleep(0.01)
