@@ -83,14 +83,14 @@ class NN_controller():
             if use_prediction_horizon:
                 # Calculate the prediction horizon length
                 pv_s_end = np.zeros(pv_st.shape)
-                pv_vt_pred = pv_vt
-                pv_st_pred = pv_st
-                for i in range(50):
-                    pv_vt_pred = pv_vt_pred + pv_at * 0.5
-                    pv_vt_pred = np.clip(pv_vt_pred, 0, np.Inf)
-                    pv_st_pred = pv_st_pred + pv_vt_pred * 0.5
-                pv_s_end = pv_st_pred - pv_st
-                nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_s_end])
+                
+                a_input = np.array(pv_at)
+                a = np.tile(a_input, (49, 1))
+                v = pv_vt + np.cumsum(a * 0.5, axis=0)
+                v = np.clip(v, 0, np.Inf)
+                s = pv_st + np.cumsum(v * 0.5, axis=0)
+                pv_s_end = s[-1, :] - pv_st
+                nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_s_end + (pv_st - s_st)])
             else:
                 nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st])
         if self.num_input == 4:
@@ -108,13 +108,11 @@ class NN_controller():
         if len(s_a_IDM) > 0:
             det = ((ttc_i > 0.15) + (pv_st - s_st < 10)).astype(bool)
             IDM_w = det.astype(float)
-            if IDM_w:
-                print('IDM brake on at time: ' ,  sim_t)
             ego_a_tgt = IDM_w * s_a_IDM + (1.0 - IDM_w) * s_a_nn
         else:
             ego_a_tgt = None
             
-        return ego_a_tgt
+        return s_a_nn
     
 class lookup_table_controller():
     def __init__(self, table_filename, max_s1, max_s2, max_dv, num_s1, num_s2, num_dv):

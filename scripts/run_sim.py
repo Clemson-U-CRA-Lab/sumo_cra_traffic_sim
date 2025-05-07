@@ -100,7 +100,7 @@ if __name__=="__main__":
     # Initialize controller
     dirname = os.path.dirname(__file__)
     # nn_pt_filename = dirname + '/traffic_following_control_4_input_best.pt'
-    nn_pt_filename = dirname + '/traffic_following_control_v4_256_egoV_dv_dsPred.pt'
+    nn_pt_filename = dirname + '/traffic_following_control_v4_egoV_dv_dsPredEnd.pt'
     
     # Setup controller
     if USING_NEURAL_NETWORK:
@@ -132,15 +132,13 @@ if __name__=="__main__":
     lead_s = 325.0
     end_s = 0.0
     
-    while sumo_sim_manager.step * 0.1 < record_t[-1] + 25:
+    while sumo_sim_manager.step * 0.1 < record_t[-1] + 30:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
         # Initialize power record
         P_t = []
         Spd_t = []
-        
-        start_t = time.time()
         
         s_vt_traffic = []
         pv_vt_traffic = []
@@ -150,9 +148,9 @@ if __name__=="__main__":
         
         s_at_traffic = []
         pv_at_traffic = []
-        
+        start_t = time.time()
         for i in range(0, num_veh):
-            if i == 0: #or i == int(num_veh/2):
+            if i == 0 or i == int(num_veh/2):
                 # Get leading vehicle speed
                 v_lead_id = np.argmin(np.abs([record_t - sim_t]))
                 v_tgt_lead = front_v_t[v_lead_id] #+ 2.0 * (random.random() - 0.5)
