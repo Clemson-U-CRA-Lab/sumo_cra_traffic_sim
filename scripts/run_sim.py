@@ -22,10 +22,10 @@ class sumo_sim():
     def init_vehicles_large_map(self, num_vehicle):
         self.num_veh = num_vehicle
         self.sumo_veh = [None]*num_vehicle
-        for i in range(int(self.num_veh / 2)):
+        for i in range(int(self.num_veh)):
             self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 320 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0)
-        for j in range(int(self.num_veh / 2), self.num_veh):
-            self.sumo_veh[j] = SUMO_vehicles(vehicle_ID="veh" + str(j), init_s= 350 - 12 * (j - int(num_veh/2)), init_lane=1, route_ID="route1", lane_change_mode=0)
+        # for j in range(int(self.num_veh / 2), self.num_veh):
+        #     self.sumo_veh[j] = SUMO_vehicles(vehicle_ID="veh" + str(j), init_s= 350 - 12 * (j - int(num_veh/2)), init_lane=1, route_ID="route1", lane_change_mode=0)
     
     def init_vehicles_CMI(self, num_vehicle):
         self.num_veh = num_vehicle
@@ -99,8 +99,9 @@ if __name__=="__main__":
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
-    # nn_pt_filename = dirname + '/traffic_following_control_4_input_best.pt'
-    nn_pt_filename = dirname + '/traffic_following_control_v4_egoV_dv_dsPredEnd.pt'
+    # nn_pt_filename = dirname + '/traffic_following_control_4_input.pt'
+    # nn_pt_filename = dirname + '/traffic_following_control_v4_egoV_dv_dsPredEnd.pt'
+    nn_pt_filename = dirname + '/traffic_following_control.pt'
     
     # Setup controller
     if USING_NEURAL_NETWORK:
@@ -113,7 +114,7 @@ if __name__=="__main__":
         print('Use online MPC to control traffic vehicles')
     elif USING_IDM:
         IDM_control = IDM(a=4, b=5, s0=3, v0=20, T=4)
-        controller_name = 'Intelligent Driving Model'
+        controller_name = 'Intelligent_Driving_Model'
         print('Use IDM to control traffic vehicles')
     else:
         print('No controller for all vehicles')
@@ -150,7 +151,7 @@ if __name__=="__main__":
         pv_at_traffic = []
         start_t = time.time()
         for i in range(0, num_veh):
-            if i == 0 or i == int(num_veh/2):
+            if i == 0:# or i == int(num_veh/2):
                 # Get leading vehicle speed
                 v_lead_id = np.argmin(np.abs([record_t - sim_t]))
                 v_tgt_lead = front_v_t[v_lead_id] #+ 2.0 * (random.random() - 0.5)
@@ -200,21 +201,22 @@ if __name__=="__main__":
             acc = acc_traffic_step_t[0]
             
             # Assign the acceleration to ego vehicle
-            sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc, v_max=15)
+            sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc, v_max=30)
         
         if USING_NEURAL_NETWORK:
-            acc_traffic_step_t = FCN_control.step_forward(s_vt=np.array(s_vt_traffic), pv_vt=np.array(pv_vt_traffic), 
+            acc_traffic_step_t = FCN_control.step_forward(s_vt=np.array(s_vt_traffic), pv_vt=np.array(pv_vt_traffic),
                                                           s_st=np.array(s_st_traffic), pv_st=np.array(pv_st_traffic),
-                                                          s_at=np.array(s_at_traffic), pv_at=np.array(pv_at_traffic), 
+                                                          s_at=np.array(s_at_traffic), pv_at=np.array(pv_at_traffic),
                                                           use_prediction_horizon=True, sim_t=sim_t)
-            sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0], v_max=15)
+            sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0], v_max=30)
             for i in range(1, num_veh):
-                if i < int(num_veh / 2):
-                    sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1], v_max=15)
-                elif i > int(num_veh / 2):
-                    sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-2], v_max=15)
-                else:
-                    continue
+                sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1], v_max=30)
+                #if i < int(num_veh / 2):
+                #    sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1], v_max=15)
+                #elif i > int(num_veh / 2):
+                #    sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-2], v_max=15)
+                #else:
+                #    continue
         
         # Add power consumption
         Power_t.append(P_t)
