@@ -89,17 +89,17 @@ class NN_controller():
         s = pv_st + np.cumsum(v * 0.5, axis=0)
         pv_s_end = np.clip(s[-1, :] - s_st, -10, 1500)
         pv_v_end = v[-1, :] - s_vt
-        sig_v = 121
-        sig_s = 1320
-        c_dv = 70
-        c_ds = 600
+        sig_dv = 25
+        sig_ds = 300
+        c_dv = 55.13
+        c_ds = 910
         
         if self.num_input == 3:
             if use_prediction_horizon:
-                nn_input_vec = np.array([s_vt, 
-                                         np.exp(-(pv_v_end - c_dv) / (0.5 * sig_v)), 
-                                         np.exp(-(pv_s_end - c_ds) / (0.25 * sig_s))])
-                # nn_input_vec = np.array([s_vt, pv_v_end, pv_st - s_st])
+                # nn_input_vec = np.array([s_vt, 
+                #                          np.exp(-(pv_v_end - c_dv) / (2 * sig_dv)), 
+                #                          np.exp(-(pv_s_end - c_ds) / (2 * sig_ds))])
+                nn_input_vec = np.array([s_vt, pv_v_end, pv_s_end])
             else:
                 nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st])
         if self.num_input == 4:

@@ -101,7 +101,7 @@ if __name__=="__main__":
     dirname = os.path.dirname(__file__)
     # nn_pt_filename = dirname + '/traffic_following_control_4_input.pt'
     # nn_pt_filename = dirname + '/traffic_following_control_v4_egoV_dv_dsPredEnd.pt'
-    nn_pt_filename = dirname + '/traffic_following_control.pt'
+    nn_pt_filename = dirname + '/traffic_following_control_dc_trained.pt'
     
     # Setup controller
     if USING_NEURAL_NETWORK:
