@@ -47,7 +47,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--logging_sim", help="whether to save the simulation data", action="store_true")
     parser.add_argument("--num_sv", type=int, default=5.0, help="Number of vehicles in the traffic")
-    parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy', 'US06','Simple'], help='Choose leading vehicles speed profile')
+    parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy', 'US06','FTPsec1','FTPsec2'], help='Choose leading vehicles speed profile')
     parser.add_argument("control_type", choices=['MPC', 'NN', 'IDM'], help='Choose control method for traffic vehicles')
     args = parser.parse_args()
     
@@ -81,8 +81,10 @@ if __name__=="__main__":
         spd_filename = parent_dir + "/speed_profile/I85_nycccol.csv"
     elif args.leading_speed_profile == 'US06':
         spd_filename = parent_dir + "/speed_profile/US06_CMI_Urban_speed_profile.csv"
-    elif args.leading_speed_profile == 'Simple':
-        spd_filename = parent_dir + "/speed_profile/ITIC_Lane_Change_Modeling_StartLane_Fast.csv"
+    elif args.leading_speed_profile == 'FTPsec1':
+        spd_filename = parent_dir + "/speed_profile/FTPcol_sec1_spd_profile.csv"
+    elif args.leading_speed_profile == 'FTPsec2':
+        spd_filename = parent_dir + "/speed_profile/FTPcol_sec2_spd_profile.csv"
     else:
         print('Unable to locate speed profile')
         sys.exit(1)
@@ -99,8 +101,6 @@ if __name__=="__main__":
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
-    # nn_pt_filename = dirname + '/traffic_following_control_4_input.pt'
-    # nn_pt_filename = dirname + '/traffic_following_control_v4_egoV_dv_dsPredEnd.pt'
     nn_pt_filename = dirname + '/traffic_following_control_dc_trained.pt'
     
     # Setup controller
