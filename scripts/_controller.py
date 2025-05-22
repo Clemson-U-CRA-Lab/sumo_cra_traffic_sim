@@ -115,7 +115,7 @@ class NN_controller():
         
         # Check the if IDM braking is needed
         if len(s_a_IDM) > 0:
-            det = ((ttc_i > 0.15) + (pv_st - s_st < 10)).astype(bool)
+            det = ((ttc_i > 0.25) * (pv_st - s_st < 15)).astype(bool)
             IDM_w = det.astype(float)
             ego_a_tgt = IDM_w * s_a_IDM + (1.0 - IDM_w) * s_a_nn
         else:
