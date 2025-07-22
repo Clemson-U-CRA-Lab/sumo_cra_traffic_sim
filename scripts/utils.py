@@ -64,7 +64,7 @@ class SUMO_Traffic_Light():
         self.status_TL[TL_id] = TL_status
 
 class SUMO_vehicles():
-    def __init__(self, vehicle_ID, init_s, init_lane, route_ID, lane_change_mode):
+    def __init__(self, vehicle_ID, init_s, init_lane, route_ID, lane_change_mode, sumo_brake):
         self.ID = vehicle_ID
         self.pv_ID = None
         self.v = 0.0
@@ -77,10 +77,11 @@ class SUMO_vehicles():
         self.pv_s_prev = None
         self.pv_v_prev = None
 
-        traci.vehicle.add(self.ID, route_ID, typeID = 'electricCar', departLane=str(self.lane_ID), departPos=self.s)
+        traci.vehicle.add(self.ID, route_ID, typeID = 'electricCar', departLane=str(self.lane_ID), departPos=self.s, departSpeed=10)
         traci.vehicle.setParameter(objectID=self.ID, key='vClass', value='evehicle')
         traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=lane_change_mode)
-        traci.vehicle.setSpeedMode(vehID=self.ID, speedMode=96)
+        if sumo_brake:
+            traci.vehicle.setSpeedMode(vehID=self.ID, speedMode=96)
     
     def update_preceding_traffic_light(self, TL_s):
         # Find the traffic that is in front of the traffic light

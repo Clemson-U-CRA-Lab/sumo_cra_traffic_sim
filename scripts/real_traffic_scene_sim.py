@@ -112,7 +112,7 @@ if __name__ == "__main__":
     parent_dir = os.path.abspath(os.path.join(current_dirname, os.pardir))
     sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
     sumo_sim_manager.start_Sumo(open_gui=True)
-    traffic_light_manager = SUMO_Traffic_Light(s_TL=TL_s, t_TL=TL_timing, status_TL=TL_status, red_duration=30, amber_duration=2.5, green_duration=30)
+    traffic_light_manager = SUMO_Traffic_Light(s_TL=TL_s, t_TL=TL_timing, status_TL=TL_status, red_duration=60, amber_duration=2.5, green_duration=37.5)
     
     # Traffic control setting
     if args.control_type == 'MPC':
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         
     # Setup controller
     if USING_NEURAL_NETWORK:
-        nn_pt_filename = current_dirname + '/traffic_following_control.pt'
+        nn_pt_filename = current_dirname + '/traffic_following_control_dc_trained.pt'
         FCN_control = NN_controller(nn_pt_file=nn_pt_filename, input_num=3)
         controller_name = 'Neural_Network'
         print('Use neural network to control traffic vehicles')
@@ -191,7 +191,7 @@ if __name__ == "__main__":
             
             if ego_states[2] > sumo_sim_manager.density_meas_s_start and ego_states[2] < sumo_sim_manager.density_meas_s_end:
                 sumo_sim_manager.traffic_density_meas += 1
-            power_t += engine_power_estimation(ego_a=ego_states[0], ego_v=ego_states[1]) 
+            power_t += engine_power_estimation(ego_a=ego_states[0], ego_v=ego_states[1])
             spd_t += ego_states[1]
             
             # Check if preceding vehicle exists
@@ -216,14 +216,14 @@ if __name__ == "__main__":
             else:
                 if sumo_sim_manager.sumo_veh[ego_id].pTL_id is not None: # Check if any traffic light is ahead of the leading vehicle
                     if traffic_light_manager.status_TL[sumo_sim_manager.sumo_veh[ego_id].pTL_id] == 0:
-                        pv_states = [0, 0, ego_states[2] + sumo_sim_manager.sumo_veh[ego_id].pTL_s]
+                        pv_states = [0, 0, ego_states[2] + sumo_sim_manager.sumo_veh[ego_id].pTL_s - 20]
                     else:
                         pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
                 else:
                     pv_states = [1, ego_states[1] + 5, ego_states[2] + 200]
             
             # Store vehicle states
-            veh_ctrl_input[0:-1, k] = np.concatenate((ego_states, pv_states))\
+            veh_ctrl_input[0:-1, k] = np.concatenate((ego_states, pv_states))
         
         loop_start_t = time.time() # Start recording runtime
         # Apply control all traffic vehicles in the sim
@@ -233,7 +233,8 @@ if __name__ == "__main__":
         if USING_NEURAL_NETWORK:
             veh_acc_t = FCN_control.step_forward(s_vt=veh_ctrl_input[1, :], pv_vt=veh_ctrl_input[4, :],
                                                    s_st=veh_ctrl_input[2, :], pv_st=veh_ctrl_input[5, :],
-                                                   s_at=veh_ctrl_input[0, :], pv_at=veh_ctrl_input[3, :])
+                                                   s_at=veh_ctrl_input[0, :], pv_at=veh_ctrl_input[3, :],
+                                                   use_prediction_horizon=True, sim_t=sim_t)
         if USING_ONLINE_MPC:
             veh_acc_t = []
             for i in range(len(sumo_sim_manager.vehID_list)):
@@ -259,7 +260,7 @@ if __name__ == "__main__":
             num_veh_record.append(len(sumo_sim_manager.vehID_list))
             print("Simulation duration: ", str(round(sim_t, 1)), "Trafficlight status: ", traffic_light_manager.status_TL, 
                   'Num vehicles: ', len(sumo_sim_manager.vehID_list), "Runtime: ", str(round((loop_end_t - loop_start_t) * 1000, 3)), end='\r', flush=True)
-        time.sleep(0.01)
+        #time.sleep(0.001)
     
     print('Average runtime is: ' + str(np.mean(np.array(runtime_record))))
     # Compute total power consumption
