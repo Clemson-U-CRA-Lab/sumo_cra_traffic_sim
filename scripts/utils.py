@@ -77,7 +77,7 @@ class SUMO_vehicles():
         self.pv_s_prev = None
         self.pv_v_prev = None
 
-        traci.vehicle.add(self.ID, route_ID, typeID = 'electricCar', departLane=str(self.lane_ID), departPos=self.s, departSpeed=10)
+        traci.vehicle.add(self.ID, route_ID, typeID = 'electricCar', departLane=str(self.lane_ID), departPos=self.s, departSpeed=20)
         traci.vehicle.setParameter(objectID=self.ID, key='vClass', value='evehicle')
         traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=lane_change_mode)
         if sumo_brake:

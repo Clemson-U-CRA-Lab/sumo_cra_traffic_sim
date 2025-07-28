@@ -91,7 +91,7 @@ if __name__=="__main__":
         controller_name = 'Neural_Network'
         print('Use neural network to control traffic vehicles')
     elif USING_IDM:
-        IDM_control = IDM(a=4, b=5, s0=3, v0=20, T=4)
+        IDM_control = IDM(a=4, b=5, s0=3, v0=25, T=5)
         controller_name = 'Intelligent_Driving_Model'
         print('Use IDM to control traffic vehicles')
     else:
@@ -100,6 +100,8 @@ if __name__=="__main__":
     Avg_spd_traffic = []
     Avg_density_traffic = []
     Avg_traffic_flow_traffic = []
+    Gap_to_front = []
+    Ego_speed = []
     
     flow_dt = 0.0
     veh_flow_count = 0
@@ -107,7 +109,7 @@ if __name__=="__main__":
     
     ego_v = []
     pv_v = []
-    inflow_period = 1.0
+    inflow_period = 5.0
     inflow_timer = 0.0
 
     sumo_sim_manager.init_vehicles_large_map(num_vehicle=num_veh)
@@ -145,11 +147,13 @@ if __name__=="__main__":
             if i == 0:
                 [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t] = sumo_sim_manager.sumo_veh[i].getVehicleStates()
                 veh_0_acc_t = 0.0
-                veh_0_spd_t = 20.0
-                veh_0_dist_t = veh_1_dist_t + 30
+                veh_0_spd_t = 25.0
+                veh_0_dist_t = veh_1_dist_t + 35
             else:
                 [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t] = sumo_sim_manager.sumo_veh[i-1].getVehicleStates()
                 [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t] = sumo_sim_manager.sumo_veh[i].getVehicleStates()
+                Gap_to_front.append(veh_0_dist_t - veh_1_dist_t)
+                Ego_speed.append(veh_1_spd_t)
             
             if USING_NEURAL_NETWORK:
                 acc_traffic_step_t = FCN_control.step_forward(s_vt=np.array([veh_1_spd_t]), pv_vt=np.array([veh_0_spd_t]),
@@ -177,8 +181,11 @@ if __name__=="__main__":
         
         # Record the traffic density and traffic flow
         unique_vehicle_id = traci.edge.getLastStepVehicleIDs(edgeID="E2")
+        if len(unique_vehicle_id) == 0:
+            continue
         edge_len = traci.lane.getLength(laneID="E2_0")
         flow_interval = args.flow_measure_interval
+        
         if flow_dt < flow_interval:
             flow_dt += 0.1
         else:
@@ -192,8 +199,16 @@ if __name__=="__main__":
     
     traci.close(True)
     
+    with open(controller_name + "_3.csv", 'w') as f:
+        csv_writer = csv.writer(f)
+        data_x = np.array(Avg_density_traffic)
+        data_y = np.array(Avg_traffic_flow_traffic)
+        data = np.vstack((data_x, data_y)).T
+        csv_writer.writerow(['Traffic_Density', 'Traffic_Flow'])
+        csv_writer.writerows(data)
+    
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
     print('Runtime standard deviation is: ', str(round(np.std(runtime_record) * 1000, 4)), 'ms')
     
-    plt.scatter(Avg_density_traffic, Avg_traffic_flow_traffic)
+    plt.scatter(Avg_density_traffic, Avg_traffic_flow_traffic, s=15, c='red', label='Gap to front vs Ego speed')
     plt.show()

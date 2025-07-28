@@ -76,7 +76,7 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
-        n_pred_steps = 51 # Number of stages the prediction is run for - 50 chosen here for example
+        n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
         for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
             # Logic to prevent overspeeding and reversing
             if pv_state[1] > v_max:

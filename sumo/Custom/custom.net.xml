@@ -37,26 +37,26 @@
     <location netOffset="0.00,0.00" convBoundary="0.00,0.00,1500.00,0.00" origBoundary="0.00,0.00,1500.00,0.00" projParameter="!"/>
 
     <edge id=":N2_0" function="internal">
-        <lane id=":N2_0_0" index="0" speed="13.90" length="0.10" shape="200.00,-1.60 200.00,-1.60"/>
+        <lane id=":N2_0_0" index="0" speed="30.00" length="0.10" shape="200.00,-1.60 200.00,-1.60"/>
     </edge>
     <edge id=":N3_0" function="internal">
-        <lane id=":N3_0_0" index="0" speed="13.90" length="0.10" shape="1000.00,-1.60 1000.00,-1.60"/>
+        <lane id=":N3_0_0" index="0" speed="30.00" length="0.10" shape="1000.00,-1.60 1000.00,-1.60"/>
     </edge>
 
     <edge id="E1" from="N1" to="N2" priority="1">
-        <lane id="E1_0" index="0" speed="13.90" length="200.00" shape="0.00,-1.60 200.00,-1.60"/>
+        <lane id="E1_0" index="0" speed="30.00" length="200.00" shape="0.00,-1.60 200.00,-1.60"/>
     </edge>
     <edge id="E2" from="N2" to="N3" priority="1">
-        <lane id="E2_0" index="0" speed="13.90" length="800.00" shape="200.00,-1.60 1000.00,-1.60"/>
+        <lane id="E2_0" index="0" speed="30.00" length="800.00" shape="200.00,-1.60 1000.00,-1.60"/>
     </edge>
     <edge id="E3" from="N3" to="N4" priority="1">
-        <lane id="E3_0" index="0" speed="13.90" length="500.00" shape="1000.00,-1.60 1500.00,-1.60"/>
+        <lane id="E3_0" index="0" speed="30.00" length="500.00" shape="1000.00,-1.60 1500.00,-1.60"/>
     </edge>
 
     <tlLogic id="N3" type="static" programID="0" offset="0">
-        <phase duration="55" state="G"/>
+        <phase duration="25" state="G"/>
         <phase duration="5"  state="y"/>
-        <phase duration="35" state="r"/>
+        <phase duration="55" state="r"/>
     </tlLogic>
 
     <junction id="N1" type="dead_end" x="0.00" y="0.00" incLanes="" intLanes="" shape="0.00,0.00 0.00,-3.20"/>

@@ -29,7 +29,7 @@ class IDM():
         s_safe[s_safe < self.s0 + 3] = self.s0 + 3
         acc = self.a * (1 - (ego_v / self.v0) ** 4 -
                         (s_safe / (front_s - ego_s - self.s0)) ** 2)
-        acc = np.clip(acc, -3, 3)
+        acc = np.clip(acc, -4, 4)
         return acc
     
 class PCC_MPC_controller():
