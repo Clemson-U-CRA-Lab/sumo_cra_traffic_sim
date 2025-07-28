@@ -12,6 +12,7 @@ from _controller import *
 from _constants import *
 import time
 import random
+
 class sumo_sim():
     def __init__(self, sumo_config_name):
         self.sumoBinary = "/usr/bin/sumo-gui"
@@ -27,16 +28,16 @@ class sumo_sim():
         try:
             front_state = self.sumo_veh[-1].getVehicleStates()
             if np.abs(front_state[2] - 12) > 0.5 and front_state[2] > 0:
-                veh = SUMO_vehicles(vehicle_ID="veh" + str(max_veh_id + 1), init_s=20, init_lane=0, route_ID="route0", lane_change_mode=0, sumo_brake=False)
+                veh = SUMO_vehicles(vehicle_ID="veh" + str(max_veh_id + 1), init_s=50, init_lane=0, route_ID="route0", lane_change_mode=0, sumo_brake=False)
                 self.sumo_veh.append(veh)
         except:
             pass
         
-    def init_vehicles_large_map(self, num_vehicle):
+    def init_vehicles_large_map(self, num_vehicle, gap):
         self.num_veh = num_vehicle
         self.sumo_veh = [None]*num_vehicle
         for i in range(int(self.num_veh)):
-            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s=200 - 12 * i, init_lane=0, route_ID="route0", lane_change_mode=0, sumo_brake=False)
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s=1300 - gap*i, init_lane=0, route_ID="route0", lane_change_mode=0, sumo_brake=False)
 
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
@@ -70,6 +71,7 @@ if __name__=="__main__":
         USING_IDM = 1 # If using IDM to traffic front vehicle
         
     num_veh = args.num_sv
+    gap = 1000 / num_veh
     
     veh_sim_t = []
     
@@ -109,12 +111,12 @@ if __name__=="__main__":
     
     ego_v = []
     pv_v = []
-    inflow_period = 5.0
+    inflow_period = gap / 20
     inflow_timer = 0.0
 
-    sumo_sim_manager.init_vehicles_large_map(num_vehicle=num_veh)
+    sumo_sim_manager.init_vehicles_large_map(num_vehicle=num_veh, gap=gap)
     
-    while sumo_sim_manager.step * 0.1 < 500:
+    while sumo_sim_manager.step * 0.1 < 50:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         
@@ -199,7 +201,7 @@ if __name__=="__main__":
     
     traci.close(True)
     
-    with open(controller_name + "_3.csv", 'w') as f:
+    with open(controller_name + "_" + str(num_veh) + ".csv", 'w') as f:
         csv_writer = csv.writer(f)
         data_x = np.array(Avg_density_traffic)
         data_y = np.array(Avg_traffic_flow_traffic)
