@@ -16,27 +16,26 @@ from x2v_constants import *
 
 # logging utils
 from  utils_logging import *
-fileNameTemp = 'sumo_v2x_logRuntime' + datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.csv'
+LOG_RUNNING = False
+fileNameTemp = 'sumoSim_v2x_logRuntime' + datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.csv'
+csv_header = ["Realtime [sec]","Sim Time [sec]", "MPC runtime",\
+                                "v0_dist [m]","v0_lane [-]","v0_spd [m/s]","v1_acc [m/s2]",\
+                                "v1_dist [m]","v1_lane [-]","v1_spd [m/s]","v1_acc [m/s2]","MachE_accCmd [m/s2]"]
+data = np.zeros([int(END_TIME/SIM_STEP)+1,len(csv_header)])
 
 
+# Comms
 asyncSocket = True
 if asyncSocket:
     from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
 else:
     from x2vSocketInterface import x2vSocketInterface as x2vSocketInterface
 
+# Run params
 vizTraj = True
 AccIntegrateDT = MPC_DT # MPC_DT or SIM_STEP
 guiSumo = True
 
-# sim params
-stallTime = 180 #45 seconds, 180 for no stall at cmi
-
-# Logging inits
-csv_header = ["Realtime [sec]","Sim Time [sec]", "MPC runtime",\
-                                "v0_dist [m]","v0_lane [-]","v0_spd [m/s]","v1_acc [m/s2]",\
-                                "v1_dist [m]","v1_lane [-]","v1_spd [m/s]","v1_acc [m/s2]","MachE_accCmd [m/s2]"]
-data = np.zeros([int(END_TIME/SIM_STEP)+1,len(csv_header)])
 
 if __name__=="__main__":
 
@@ -96,6 +95,7 @@ if __name__=="__main__":
     # Get the real-world start time
     real_start_time = time.monotonic()  
     real_now = real_start_time
+
     sim_start_time = 0  # SUMO's starting simulation time
     while sumo_sim_manager.step < END_TIME/SIM_STEP:
 
@@ -112,7 +112,7 @@ if __name__=="__main__":
         # Assign speeds to leading vehicle
         v_lead_id = np.argmin(np.abs([record_t - sim_time]))
         v_tgt_lead = front_v_t[v_lead_id]
-        if sim_time < stallTime:
+        if sim_time < 45:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=v_tgt_lead)
         else:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=0)
@@ -132,6 +132,7 @@ if __name__=="__main__":
                                                        simStep=SIM_STEP,
                                                        mpc_dt=MPC_DT,
                                                        mpc_ref_stages=MPC_REF_STAGES,
+                                                       PassIntention=BOOL_USE_FRONT_PRVIEW,
                                                        outputUsedCycleforFront=True,
                                                        )
         else:
@@ -152,7 +153,7 @@ if __name__=="__main__":
             # sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(0, 255, 2, 100), fill=False, layer=4)
            
         # Assign the acceleration to leader nv0
-        if sim_time >= stallTime: #45.0:
+        if sim_time >= 45.0:
             # Stalling it
             lead_nv_array = [sim_time, 
                             veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
@@ -177,15 +178,19 @@ if __name__=="__main__":
             print(f"{bcolors.OKGREEN}Delta T RSPCSim-VEHReal: {(sim_time-realCavArray[6]):.2f}s{bcolors.ENDC}")
             print(f"{bcolors.OKCYAN}Ego x,y: {realCavArray[4]:.2f}, {realCavArray[5]:.2f}.{bcolors.ENDC}" )
             print(f"{bcolors.OKCYAN}Ego [GPS] s: -- , v:{realCavArray[2]:.2f}.{bcolors.ENDC}" )
-            print(f"{bcolors.OKCYAN}Ego MpcCmd: {realCavArray[7]:.2f}.{bcolors.ENDC}" )
+            print(f"{bcolors.OKCYAN}Ego MpcCmd: -- , ax:{realCavArray[7]:.2f}.{bcolors.ENDC}" )
 
 
             # Update Real CAV pos in simulation:::
+
+            # if local testing w/o gps:
+            sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=realCavArray[7], dt=AccIntegrateDT) # careful: assign commmand or real sensed acc?
+            
             # if testing with gps and vehicle run
-            sumo_sim_manager.update_CAV_in_sumo(veh='nv1', 
-                                                    spd=realCavArray[2],
-                                                    pos=[realCavArray[4],realCavArray[5]]
-                                                    )
+            # sumo_sim_manager.update_CAV_in_sumo(veh='nv1', 
+            #                                         spd=realCavArray[2],
+            #                                         pos=[realCavArray[4],realCavArray[5]]
+            #                                         )
 
         
             veh_0_acc.append(veh_states_matrix[0][1])
@@ -197,11 +202,13 @@ if __name__=="__main__":
             veh_1_dist.append(veh_states_matrix[1][3])
             mache_accCmd.append(realCavArray[7])
         
-            veh_sim_t.append(sim_time)
-            data[sumo_sim_manager.step,:] = ([real_now-real_start_time, sim_time, time.time() - start_t,
-                        veh_states_matrix[0][3],0.0,veh_states_matrix[0][2],veh_states_matrix[0][1],
-                        veh_states_matrix[1][3],0.0,veh_states_matrix[1][2],veh_states_matrix[1][1], realCavArray[7]])
-            
+        veh_sim_t.append(sim_time)
+
+        data[sumo_sim_manager.step,:] = ([real_now-real_start_time, sim_time, time.time() - start_t,
+                    veh_states_matrix[0][3],0.0,veh_states_matrix[0][2],veh_states_matrix[0][1],
+                    veh_states_matrix[1][3],0.0,veh_states_matrix[1][2],veh_states_matrix[1][1], realCavArray[7]])
+        
+        if LOG_RUNNING:
             with open(fileNameTemp, "a", newline="") as csv_file:
                 # Create a CSV writer object
                 csv_writer = csv.writer(csv_file)
@@ -215,7 +222,8 @@ if __name__=="__main__":
         print(f"{bcolors.OKGREEN}Delta T RSPC[Sim-Real]: {((real_now - real_start_time)-sim_time):.2f}s{bcolors.ENDC}")
     
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
-    save_csv_sumo(data, csv_header=csv_header)
+    save_csv_sumo(data, file_prefix='sumoSim_log', csv_header=csv_header)
+
 
     plt.figure(1)
     

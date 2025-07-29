@@ -174,9 +174,9 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
                                          sim_t, record_t, 
                                          front_v_t, online_MPC_control, 
                                          simStep, mpc_dt=0.5, 
-                                         mpc_ref_stages=50, 
+                                         mpc_ref_stages=32, 
                                          verbose=False,
-                                         useFirstVehCyclePreview=False,
+                                         PassIntention=False,
                                          outputUsedCycleforFront=False):
     """
     Perform online MPC control step for multiple vehicles.
@@ -219,7 +219,7 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
                                                 pv_s=pv_dist, pv_v=pv_spd, pv_a=pv_acc,
                                                 cycle_ss=prev_pred_s, cycle_vs=prev_pred_v,
                                                 cycle_dt=cycle_dt, n_refs=mpc_ref_stages,
-                                                preview=useFirstVehCyclePreview # no preds for nv0
+                                                preview=PassIntention # no preds for nv0
             )
             preds_s[nVehicleStatesMatrix[i][0]] = pred_s
             preds_v[nVehicleStatesMatrix[i][0]] = pred_v
@@ -233,8 +233,8 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
                                                 ego_s=ego_dist, ego_v=ego_spd, ego_a=ego_acc,
                                                 pv_s=pv_dist, pv_v=pv_spd, pv_a=pv_acc,
                                                 cycle_ss=prev_pred_s, cycle_vs=prev_pred_v,
-                                                cycle_dt=mpc_dt, n_refs=32,
-                                                preview=True
+                                                cycle_dt=mpc_dt, n_refs=mpc_ref_stages,
+                                                preview=PassIntention
             )
             preds_s[nVehicleStatesMatrix[i][0]] = pred_s
             preds_v[nVehicleStatesMatrix[i][0]] = pred_v
