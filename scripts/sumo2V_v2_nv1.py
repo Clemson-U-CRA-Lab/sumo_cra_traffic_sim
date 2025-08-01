@@ -16,7 +16,12 @@ from x2v_constants import *
 
 # logging utils
 from  utils_logging import *
+LOG_RUNNING = False
 fileNameTemp = 'sumo_v2x_logRuntime' + datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.csv'
+csv_header = ["Realtime [sec]","Sim Time [sec]", "MPC runtime",\
+                                "v0_dist [m]","v0_lane [-]","v0_spd [m/s]","v1_acc [m/s2]",\
+                                "v1_dist [m]","v1_lane [-]","v1_spd [m/s]","v1_acc [m/s2]","MachE_accCmd [m/s2]"]
+data = np.zeros([int(END_TIME/SIM_STEP)+1,len(csv_header)])
 
 
 asyncSocket = True
@@ -28,15 +33,8 @@ else:
 vizTraj = True
 AccIntegrateDT = MPC_DT # MPC_DT or SIM_STEP
 guiSumo = True
-
-# sim params
 stallTime = 180 #45 seconds, 180 for no stall at cmi
 
-# Logging inits
-csv_header = ["Realtime [sec]","Sim Time [sec]", "MPC runtime",\
-                                "v0_dist [m]","v0_lane [-]","v0_spd [m/s]","v1_acc [m/s2]",\
-                                "v1_dist [m]","v1_lane [-]","v1_spd [m/s]","v1_acc [m/s2]","MachE_accCmd [m/s2]"]
-data = np.zeros([int(END_TIME/SIM_STEP)+1,len(csv_header)])
 
 if __name__=="__main__":
 
@@ -132,6 +130,7 @@ if __name__=="__main__":
                                                        simStep=SIM_STEP,
                                                        mpc_dt=MPC_DT,
                                                        mpc_ref_stages=MPC_REF_STAGES,
+                                                       PassIntention=BOOL_USE_FRONT_PRVIEW,
                                                        outputUsedCycleforFront=True,
                                                        )
         else:
@@ -202,10 +201,11 @@ if __name__=="__main__":
                         veh_states_matrix[0][3],0.0,veh_states_matrix[0][2],veh_states_matrix[0][1],
                         veh_states_matrix[1][3],0.0,veh_states_matrix[1][2],veh_states_matrix[1][1], realCavArray[7]])
             
-            with open(fileNameTemp, "a", newline="") as csv_file:
-                # Create a CSV writer object
-                csv_writer = csv.writer(csv_file)
-                csv_writer.writerow(data[sumo_sim_manager.step,:])            
+            if LOG_RUNNING:
+                with open(fileNameTemp, "a", newline="") as csv_file:
+                    # Create a CSV writer object
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(data[sumo_sim_manager.step,:])            
 
         # Sleep timing
         real_now = time.monotonic()
@@ -215,7 +215,7 @@ if __name__=="__main__":
         print(f"{bcolors.OKGREEN}Delta T RSPC[Sim-Real]: {((real_now - real_start_time)-sim_time):.2f}s{bcolors.ENDC}")
     
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
-    save_csv_sumo(data, csv_header=csv_header)
+    save_csv_sumo(data, file_prefix='sumo_log', csv_header=csv_header)
 
     plt.figure(1)
     
