@@ -1,6 +1,6 @@
 <configuration>
     <input>
-        <net-file value="map1.net.xml" />
+        <net-file value="map_highSpd.net.xml" />
         <route-files value="map.rou.xml" />
     </input>
     <time>
@@ -15,4 +15,6 @@
         <collision.mingap-factor value="0" />
         <collision.action value="warn" />
     </processing>
+        
+
 </configuration>

@@ -1,6 +1,6 @@
 <configuration>
     <input>
-        <net-file value="map1.net.xml" />
+        <net-file value="map_highSpd.net.xml" />
         <route-files value="map_2veh.rou.xml" />
     </input>
     <time>

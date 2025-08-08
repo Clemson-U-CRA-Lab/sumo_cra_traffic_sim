@@ -35,6 +35,16 @@ class SumoSim():
         else:
             sumoCmd = [self.sumoBinaryNoGUI, "-c", self.sumoconfig]
         traci.start(sumoCmd)
+
+        # 96 - no checks, 0 - most chcks off but speed limit adhered
+        # this should run only when the vehicles are already in network otherwise it wont update anything bcause we are iterating through vehicle in vehicle_list.
+        # for vehID in traci.vehicle.getIDList():
+            # traci.vehicle.setMinGap(vehID, 0.1)
+            # traci.vehicle.setSpeed(vehID, 0.0)
+            # traci.vehicle.setSpeedMode(vehID, 96)
+            # traci.vehicle.setAccel(vehID, 10)
+            # traci.vehicle.setDecel(vehID, 10)
+            # traci.vehicle.setEmergencyDecel(vehID, 10)
         
 
     def update_sumoConfig(self, SimStepLength):
@@ -146,7 +156,7 @@ class SumoSim():
         cycle_vs = np.empty(mpc_ref_stages)
         cycle_vs.fill(np.nan)
         
-        for i in range(32):
+        for i in range(MPC_REF_STAGES):
             t_id = np.argmin(np.abs([record_t - (i * pred_dt + sim_t)]))
             cycle_vs[i] = front_v_t[t_id]
         

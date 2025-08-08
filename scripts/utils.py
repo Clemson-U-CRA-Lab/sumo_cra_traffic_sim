@@ -172,9 +172,13 @@ import scipy.integrate
 
 def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix, 
                                          sim_t, record_t, 
-                                         front_v_t, online_MPC_control, 
-                                         simStep, mpc_dt=0.5, 
+                                         front_v_t, # Ref cycel for first vehicle.
+                                         online_MPC_control, 
+                                         simStep=0.2, mpc_dt=0.5, 
                                          mpc_ref_stages=32, 
+                                         cycle_dt = 0.1,
+                                         cycle_stages = 100,
+                                         front_s_ = None,
                                          verbose=False,
                                          PassIntention=False,
                                          outputUsedCycleforFront=False):
@@ -192,38 +196,46 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
     accelerations = {}
     preds_s ={}
     preds_v = {}
-    cycle_dt = mpc_dt
-    # cycle_dt = simStep
+    # cycle_dt = 0.1
 
     # Compute leading vehicle's driving cycle
-    cycle_vs = np.full(mpc_ref_stages, np.nan)
-    tPred = np.full(mpc_ref_stages, np.nan)
-    for i in range(mpc_ref_stages):
-        t_id = np.argmin(np.abs(record_t - (i * cycle_dt + sim_t)))
-        cycle_vs[i] = front_v_t[t_id]
+    cycle_vs = np.full(cycle_stages, np.nan)
+    cycle_ss = np.full(cycle_stages, np.nan)
+    tPred = np.full(cycle_stages, np.nan)
+    for i in range(cycle_stages):
+        t_id = np.argmin(np.abs(record_t - ((i) * cycle_dt + sim_t)))
+        cycle_vs[i] = front_v_t[t_id] # CHECK
         tPred[i] = record_t[t_id]
+        # cycle_ss[i] = front_s_t[t_id] # dont use this way, because actual front vehicle's s depends on controller performance
 
-    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=cycle_dt, initial=0) + nVehicleStatesMatrix[0][3]
+    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=cycle_dt, initial=0) + nVehicleStatesMatrix[0][3]   # CHECK
     
+    print(f"{bcolors.HEADER_MAGENTA}SIM TIME: {sim_t:.2f}{bcolors.ENDC}")
+    for veh in nVehicleStatesMatrix:
+        print(f"{bcolors.HEADER_MAGENTA}{veh[0]} S: {veh[3]:.2f}, V: {veh[2]:.2f}{bcolors.ENDC}")
+
     # Iterate over states (excluding the leader)
     prev_pred_s, prev_pred_v = cycle_ss, cycle_vs
     for i in range(1, num_vehicles):
         
         if i == 1:
+            # this is for first follower. (2nd vehiccle in the corridor)
             ego_acc, ego_spd, ego_dist = nVehicleStatesMatrix[i][1:4]
             pv_acc, pv_spd, pv_dist = nVehicleStatesMatrix[i-1][1:4]
             
+            # set_command_SUMO() expects cyclevs, cycle_ss statong from next timestep, not current
             pred_s, pred_v, acc, pred_t = online_MPC_control.svs.setCommand_SUMO(
                                                 t=sim_t, 
                                                 ego_s=ego_dist, ego_v=ego_spd, ego_a=ego_acc,
                                                 pv_s=pv_dist, pv_v=pv_spd, pv_a=pv_acc,
                                                 cycle_ss=prev_pred_s, cycle_vs=prev_pred_v,
-                                                cycle_dt=cycle_dt, n_refs=mpc_ref_stages,
-                                                preview=PassIntention # no preds for nv0
+                                                cycle_dt=cycle_dt, n_refs=cycle_stages,
+                                                preview=PassIntention
             )
             preds_s[nVehicleStatesMatrix[i][0]] = pred_s
             preds_v[nVehicleStatesMatrix[i][0]] = pred_v
             accelerations[nVehicleStatesMatrix[i][0]] = acc
+
         else:   
             ego_acc, ego_spd, ego_dist = nVehicleStatesMatrix[i][1:4]
             pv_acc, pv_spd, pv_dist = nVehicleStatesMatrix[i-1][1:4]
@@ -242,15 +254,24 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
 
         if verbose:
             if i == 1:
-                print(f"{bcolors.WARNING}===MPC Ref Cycle of nv{i-1} for nv{i}==={bcolors.ENDC}")
-                print(f"{bcolors.OKCYAN}Cycle  T for nv{i-1}: {len(tPred)},{[f'{x:.2f}' for x in tPred]}{bcolors.ENDC}")
-                print(f"{bcolors.OKGREEN}Cycle  S for nv{i-1}: {len(prev_pred_s)}, {[f'{x:.2f}' for x in prev_pred_s]}{bcolors.ENDC}")
-                print(f"{bcolors.OKBLUE}Cycle  V for nv{i-1}: {len(prev_pred_v)}, {[f'{x:.2f}' for x in prev_pred_v]}{bcolors.ENDC}")
+                # print(f"{bcolors.HEADER_MAGENTA}ego S: {ego_dist:.2f}, V: {ego_spd:.2f}{bcolors.ENDC}")
+                # print(f"{bcolors.HEADER_MAGENTA}Lead S: {pv_dist:.2f}, V: {pv_spd:.2f}{bcolors.ENDC}")
+                print(f"{bcolors.WARNING}===Ref Cycle of nv{i-1} for nv{i} MPC's reference==={bcolors.ENDC}")
+                print(f"{bcolors.OKCYAN}Cycle T for nv{i-1}: {len(tPred)},{[f'{x:.2f}' for x in tPred]}{bcolors.ENDC}")
+                print(f"{bcolors.OKGREEN}Cycle S for nv{i-1}: {len(prev_pred_s)}, {[f'{x:.2f}' for x in prev_pred_s]}{bcolors.ENDC}")
+                print(f"{bcolors.OKBLUE}Cycle V for nv{i-1}: {len(prev_pred_v)}, {[f'{x:.2f}' for x in prev_pred_v]}{bcolors.ENDC}")
+            if i > 1:
+                # print(f"{bcolors.HEADER_MAGENTA}nv{i-1} S: {ego_dist:.2f}, V: {ego_spd:.2f}{bcolors.ENDC}")
+                # print(f"{bcolors.HEADER_MAGENTA}nv{i} S: {pv_dist:.2f}, V: {pv_spd:.2f}{bcolors.ENDC}")
+                print(f"{bcolors.WARNING}===MPC solution of nv{i-1} for nv{i} MPC's Reference==={bcolors.ENDC}")
+                print(f"{bcolors.OKGREEN}Ref S for nv{i-1}: {len(prev_pred_s)}, {[f'{x:.2f}' for x in prev_pred_s]}{bcolors.ENDC}")
+                print(f"{bcolors.OKBLUE}Ref V for nv{i-1}: {len(prev_pred_v)}, {[f'{x:.2f}' for x in prev_pred_v]}{bcolors.ENDC}")
             print(f"{bcolors.WARNING}===MPC Solved for nv{i}==={bcolors.ENDC}")
             print(f"{bcolors.OKCYAN}Pred T for nv{i}: {len(pred_t)},{[f'{x:.2f}' for x in pred_t]}{bcolors.ENDC}")
             print(f"{bcolors.OKGREEN}Pred S for nv{i}: {len(pred_s)}, {[f'{x:.2f}' for x in pred_s]}{bcolors.ENDC}")
             print(f"{bcolors.OKBLUE}Pred V for nv{i}: {len(pred_v)}, {[f'{x:.2f}' for x in pred_v]}{bcolors.ENDC}")
 
+        # Store curent solved prediction for next vehicle's reference
         prev_pred_s, prev_pred_v = pred_s, pred_v
         
     if outputUsedCycleforFront:

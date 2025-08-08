@@ -80,7 +80,7 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
         # n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
-        for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
+        for k in range(1, n_pred_steps+1): # Future indices are predicted PV states - 
             # Logic to prevent overspeeding and reversing
             if pv_state[1] > v_max:
                 pv_state[2] = 0.
@@ -100,14 +100,18 @@ class PCC(_vehicle):
             pv_state[0] = self.api.inputs_p.contents.pos_pred[k]
             pv_state[1] = self.api.inputs_p.contents.vel_pred[k]
 
+        print(f"Pred T: {[f'{x:.2f}' for x in self.api.inputs_p.contents.time_pred[0:n_pred_steps]]}")
+        print(f"Pred S : {[f'{x:.2f}' for x in self.api.inputs_p.contents.pos_pred[0:n_pred_steps]]}")
+
     def setPred(self, t, pv_state, cycle_ss, cycle_vs, cycle_dt, n_pred_steps):
+        # CHECK
         dt_pred = cycle_dt # 0.1 # Time stepsize between prediction stages [s]
         t_pred = t # [s]
 
         k = 0 # First index is current PV states
         self.api.inputs_p.contents.acc_pred[k] = pv_state[2]
         self.api.inputs_p.contents.vel_pred[k] = pv_state[1]
-        self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
+        self.api.inputs_p.contents.pos_pred[k] = pv_state[0] # current pos
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
         # n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
@@ -120,14 +124,15 @@ class PCC(_vehicle):
             
             self.api.inputs_p.contents.time_pred[k] = t_pred
         
-        # print(f"Pred T: {[f'{x:.2f}' for x in self.api.inputs_p.contents.time_pred[0:n_pred_steps]]}")
-        # print(f"Pred S : {[f'{x:.2f}' for x in self.api.inputs_p.contents.pos_pred[0:n_pred_steps]]}")
+        # print(f"Ref Pred T: {len(self.api.inputs_p.contents.time_pred[0:n_pred_steps])},{[f'{x:.2f}' for x in self.api.inputs_p.contents.time_pred[0:n_pred_steps]]}")
+        # print(f"Ref Pred S : {len(self.api.inputs_p.contents.pos_pred[0:n_pred_steps])}, {[f'{x:.2f}' for x in self.api.inputs_p.contents.pos_pred[0:n_pred_steps]]}")
+        # print(f"Ref Pred V : {len(self.api.inputs_p.contents.vel_pred[0:n_pred_steps])}, {[f'{x:.2f}' for x in self.api.inputs_p.contents.vel_pred[0:n_pred_steps]]}")
     
     def setCommand_SUMO(self, t, 
                         ego_s, ego_v, ego_a, 
                         pv_s, pv_v, pv_a, 
                         cycle_ss, cycle_vs, cycle_dt, 
-                        n_refs = 32,
+                        n_refs = MPC_REF_STAGES,
                         preview=False,
                         pv_ind=0):
         '''Set the control commands, for example desired acceleration and desired lane'''
@@ -140,7 +145,7 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.t = t # Dereference pointer with .contents method
         
         # Ego vehicle states
-        self.api.inputs_p.contents.ego_state[0] = ego_s + 1.75 # self.s + self.len # MPC wants the Frenet front bumper position - the simulation was written so that .s is the back bumper position for each simulated vehicle so add vehicle len to get front bumper
+        self.api.inputs_p.contents.ego_state[0] = ego_s + 3.25  # self.s + self.len # MPC wants the Frenet front bumper position - the simulation was written so that .s is the back bumper position for each simulated vehicle so add vehicle len to get front bumper
         self.api.inputs_p.contents.ego_state[1] = ego_v # self.v # Frenet forward velocity
         self.api.inputs_p.contents.ego_state[2] = ego_a # self.a # Frenet forward acceleration - use previous Ua command if unknown/very inaccurate ego accel
         
@@ -207,6 +212,9 @@ class PCC(_vehicle):
         pos_traj = state_trajectory[0::n_states] # Pos state starts at index 0
         vel_traj = state_trajectory[1::n_states] # Vel state starts at index 1
         # acc_traj = state_trajectory[2::n_states] # Acc state starts at index 2    
+
+        # print(f"Pred T: {[f'{x:.2f}' for x in pos_traj]}")
+        # print(f"Pred S : {[f'{x:.2f}' for x in vel_traj]}")
 
         # # Slack variables
         # # We can monitor the slack variables to see if the MPC feels safe in the current situation

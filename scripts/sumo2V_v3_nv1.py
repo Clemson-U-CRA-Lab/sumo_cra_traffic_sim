@@ -16,17 +16,10 @@ from x2v_constants import *
 
 # logging utils
 from  utils_logging import *
-LOG_RUNNING = False
-fileNameTemp = 'sumoSim_v2x_logRuntime' + datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.csv'
-csv_header = ["Realtime [sec]","Sim Time [sec]", "MPC runtime",\
-                                "v0_dist [m]","v0_lane [-]","v0_spd [m/s]","v1_acc [m/s2]",\
-                                "v1_dist [m]","v1_lane [-]","v1_spd [m/s]","v1_acc [m/s2]","MachE_accCmd [m/s2]"]
 data = np.zeros([int(END_TIME/SIM_STEP)+1,len(csv_header)])
-
-latency_file = 'latency_log.csv'
-with open(latency_file, 'w') as f:
-    f.write('SimTime,SendTime,RecvTime,Delay\n')
-
+logRunning_ = False
+if logRunning_:
+    fileNameTemp = 'sumoSim_v2x_logRuntime' + datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.csv'
 
 # Comms
 asyncSocket = True
@@ -36,10 +29,9 @@ else:
     from x2vSocketInterface import x2vSocketInterface as x2vSocketInterface
 
 # Run params
-vizTraj = True
-AccIntegrateDT = MPC_DT # MPC_DT or SIM_STEP
 guiSumo = True
-stallTime = 180 #45 seconds, 180 for no stall at cmi
+vizTraj = True
+testWithoutGPS = True
 
 
 if __name__=="__main__":
@@ -70,20 +62,11 @@ if __name__=="__main__":
     leading_vehicle_speed_profile = driving_cycle_spd_profile_reader(spd_filename)
     record_t = np.array(leading_vehicle_speed_profile[:, 0])
     front_v_t = np.array(leading_vehicle_speed_profile[:, 1])
-    front_s_t = np.array(leading_vehicle_speed_profile[:, 3])
+    front_s_t = np.array(leading_vehicle_speed_profile[:, 3])+20.0
 
     # Init SUMO sim
-    sumo_sim_manager = SumoSim(sumo_config_name=parent_dir + "/sumo/v2x/v2x_2veh.sumocfg")
+    sumo_sim_manager = SumoSim(sumo_config_name=parent_dir + "/sumo/v2x/" + SUMO_CONFIG)
     sumo_sim_manager.start_Sumo(gui=guiSumo)
-
-    # 96 - no checks, 0 - most chcks off but speed limit adhered
-    for vehID in traci.vehicle.getIDList():
-        traci.vehicle.setMinGap(vehID, 0.1)
-        traci.vehicle.setSpeed(vehID, 0.0)
-        traci.vehicle.setSpeedMode(vehID, 96)
-        # traci.vehicle.setAccel(vehID, 10)
-        # traci.vehicle.setDecel(vehID, 10)
-        # traci.vehicle.setEmergencyDecel(vehID, 10)
 
     if guiSumo:
         traci.gui.trackVehicle("View #0", "nv1")
@@ -96,11 +79,9 @@ if __name__=="__main__":
         print('No controller for all vehicles')
         
     # Start simulation 
-    total_elapsed = 0
     # Get the real-world start time
     real_start_time = time.monotonic()  
     real_now = real_start_time
-
     sim_start_time = 0  # SUMO's starting simulation time
     while sumo_sim_manager.step < END_TIME/SIM_STEP:
 
@@ -117,7 +98,7 @@ if __name__=="__main__":
         # Assign speeds to leading vehicle
         v_lead_id = np.argmin(np.abs([record_t - sim_time]))
         v_tgt_lead = front_v_t[v_lead_id]
-        if sim_time < stallTime:
+        if sim_time < STALLTIME:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=v_tgt_lead)
         else:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=0)
@@ -134,11 +115,14 @@ if __name__=="__main__":
                                                        record_t=record_t,
                                                        front_v_t=front_v_t,
                                                        online_MPC_control=online_MPC_control,
-                                                       simStep=SIM_STEP,
+                                                       simStep=SIM_STEP, # unused
                                                        mpc_dt=MPC_DT,
                                                        mpc_ref_stages=MPC_REF_STAGES,
+                                                       cycle_dt=CYCLE_DT,
+                                                       cycle_stages= CYCLE_STAGES,
                                                        PassIntention=BOOL_USE_FRONT_PRVIEW,
                                                        outputUsedCycleforFront=True,
+                                                       verbose=False
                                                        )
         else:
             acc = {}
@@ -155,56 +139,47 @@ if __name__=="__main__":
                                             sim_t=sim_time,
                                             pred_dt=MPC_DT, mpc_ref_stages=MPC_REF_STAGES,
                                             colorChoice=(255,255,100), fill=False, layer=3)
-            # sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(0, 255, 2, 100), fill=False, layer=4)
+            sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(0, 255, 2, 100), fill=False, layer=4)
            
         # Assign the acceleration to leader nv0
-        if sim_time >= 45.0:
+        if sim_time >= STALLTIME:
             # Stalling it
-            lead_nv_array = [sim_time, 
+            sim_nv_array = [sim_time, 
                             veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
                             veh_states_matrix[0][3], veh_states_matrix[0][2], veh_states_matrix[0][1]  # front
-                            ] + [veh_states_matrix[0][3]]*32 + [0.0]*32 # front's s, front's v
+                            ] + [veh_states_matrix[0][3]]*CYCLE_STAGES + [0.0]*CYCLE_STAGES # front's s, front's v
         else:
             # sim_time, ego_s, ego_v, ego_a  front_s, front_v, front_a, ...
-            lead_nv_array = [sim_time, 
+            sim_nv_array = [sim_time, 
                             veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
                             veh_states_matrix[0][3], veh_states_matrix[0][2], veh_states_matrix[0][1]  # front
                             ] + [x for x in cycle_ss] + [x for x in cycle_vs] # front's s, front's v   
         
         # Send NV states to realCAV
-        send_time = time.monotonic()
-        sockInt.send_sim_info(lead_nv_array)
-        # print(f"Send Front info: {lead_nv_array[0], lead_nv_array[1:4], lead_nv_array[4:7]}")
+        sockInt.send_sim_info(sim_nv_array)
+        # print(f"Send Front info: {sim_nv_array[0], sim_nv_array[1:4], sim_nv_array[4:7]}")
 
         # Recv realCAV info and updat ereal CAV in sim
         realCavArray = sockInt.recv_veh_info()
-        if realCavArray is not None:     
-
-            # Log latency
-            recv_time = time.monotonic()
-            delay = recv_time - send_time  
-            print(f"[Latency] {delay*1000:.1f} ms")
-            with open(latency_file, 'a') as f:
-                f.write(f"{sim_time},{send_time},{recv_time},{delay}\n") 
-
+        if realCavArray is not None:        
             print(f"{bcolors.OKCYAN}==============Got from VEH============{bcolors.ENDC}" )
             # print(f"{bcolors.OKCYAN}Elapsed @ VEH Real: {realCavArray[6]:.2f}, {bcolors.OKBLUE}MPC got SimTime: {realCavArray[0]:.2f}.{bcolors.ENDC}" )
             print(f"{bcolors.OKGREEN}Delta T RSPCSim-VEHReal: {(sim_time-realCavArray[6]):.2f}s{bcolors.ENDC}")
             print(f"{bcolors.OKCYAN}Ego x,y: {realCavArray[4]:.2f}, {realCavArray[5]:.2f}.{bcolors.ENDC}" )
             print(f"{bcolors.OKCYAN}Ego [GPS] s: -- , v:{realCavArray[2]:.2f}.{bcolors.ENDC}" )
-            print(f"{bcolors.OKCYAN}Ego MpcCmd: -- , ax:{realCavArray[7]:.2f}.{bcolors.ENDC}" )
+            print(f"{bcolors.OKCYAN}Ego MpcCmd: {realCavArray[7]:.2f}.{bcolors.ENDC}" )
 
 
-            # Update Real CAV pos in simulation:::
-
-            # if local testing w/o gps:
-            sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=realCavArray[7], dt=AccIntegrateDT) # careful: assign commmand or real sensed acc?
-            
-            # if testing with gps and vehicle run
-            # sumo_sim_manager.update_CAV_in_sumo(veh='nv1', 
-            #                                         spd=realCavArray[2],
-            #                                         pos=[realCavArray[4],realCavArray[5]]
-            #                                         )
+            # Update Real CAV pos in simulation:::            
+            if testWithoutGPS:
+                # if local testing w/o gps:
+                sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=realCavArray[7], dt=SUMO_ACC_DT) # careful: assign commmand or real sensed acc?
+            else:
+                # if testing with gps and vehicle run
+                sumo_sim_manager.update_CAV_in_sumo(veh='nv1', 
+                                                        spd=realCavArray[2],
+                                                        pos=[realCavArray[4],realCavArray[5]]
+                                                        )
 
         
             veh_0_acc.append(veh_states_matrix[0][1])
@@ -217,12 +192,11 @@ if __name__=="__main__":
             mache_accCmd.append(realCavArray[7])
         
             veh_sim_t.append(sim_time)
-
             data[sumo_sim_manager.step,:] = ([real_now-real_start_time, sim_time, time.time() - start_t,
                         veh_states_matrix[0][3],0.0,veh_states_matrix[0][2],veh_states_matrix[0][1],
                         veh_states_matrix[1][3],0.0,veh_states_matrix[1][2],veh_states_matrix[1][1], realCavArray[7]])
             
-        if LOG_RUNNING:
+        if logRunning_:
             with open(fileNameTemp, "a", newline="") as csv_file:
                 # Create a CSV writer object
                 csv_writer = csv.writer(csv_file)
@@ -236,8 +210,10 @@ if __name__=="__main__":
         print(f"{bcolors.OKGREEN}Delta T RSPC[Sim-Real]: {((real_now - real_start_time)-sim_time):.2f}s{bcolors.ENDC}")
     
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
-    save_csv_sumo(data, file_prefix='sumoSim_log', csv_header=csv_header)
-
+    if testWithoutGPS:
+        save_csv_sumo(data, file_prefix='sumIndoorVIL_log', csv_header=csv_header)
+    else:
+        save_csv_sumo(data, file_prefix='sumo_log', csv_header=csv_header)
 
     plt.figure(1)
     
@@ -269,13 +245,3 @@ if __name__=="__main__":
     plt.show()
     
     traci.close(False)
-
-
-    plt.figure(2)
-    df = pd.read_csv(latency_file)
-    plt.plot(df['SimTime'], df['Delay']*1000)
-    plt.xlabel('Simulation Time [s]')
-    plt.ylabel('Delay [ms]')
-    plt.title('DoS-Induced Latency Over Time')
-    plt.grid(True)
-    plt.show()
