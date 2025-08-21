@@ -260,7 +260,7 @@ if __name__ == "__main__":
             num_veh_record.append(len(sumo_sim_manager.vehID_list))
             print("Simulation duration: ", str(round(sim_t, 1)), "Trafficlight status: ", traffic_light_manager.status_TL, 
                   'Num vehicles: ', len(sumo_sim_manager.vehID_list), "Runtime: ", str(round((loop_end_t - loop_start_t) * 1000, 3)), end='\r', flush=True)
-        #time.sleep(0.001)
+        time.sleep(0.01)
     
     print('Average runtime is: ' + str(np.mean(np.array(runtime_record))))
     # Compute total power consumption

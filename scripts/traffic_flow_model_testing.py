@@ -40,7 +40,7 @@ class sumo_sim():
             self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s=1300 - gap*i, init_lane=0, route_ID="route0", lane_change_mode=0, sumo_brake=False)
 
     def start_Sumo(self):
-        sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
+        sumoCmd = [self.sumoBinary, "-c", self.sumoconfig, "--quit-on-end"]
         traci.start(sumoCmd)
     
     def simulationStepForward(self):
@@ -52,7 +52,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--logging_sim", help="whether to save the simulation data", action="store_true")
     parser.add_argument("--num_sv", type=int, default=5.0, help="Number of vehicles in the traffic")
-    parser.add_argument("--flow_measure_interval", type=int, default=15.0, help="Number of vehicles in the traffic")
+    parser.add_argument("--flow_measure_interval", type=int, default=10.0, help="Number of vehicles in the traffic")
     parser.add_argument("control_type", choices=['NN', 'IDM'], help='Choose control method for traffic vehicles')
     args = parser.parse_args()
     
@@ -93,7 +93,7 @@ if __name__=="__main__":
         controller_name = 'Neural_Network'
         print('Use neural network to control traffic vehicles')
     elif USING_IDM:
-        IDM_control = IDM(a=4, b=5, s0=3, v0=25, T=5)
+        IDM_control = IDM(a=4, b=5, s0=3, v0=30, T=1)
         controller_name = 'Intelligent_Driving_Model'
         print('Use IDM to control traffic vehicles')
     else:
@@ -101,6 +101,7 @@ if __name__=="__main__":
     
     Avg_spd_traffic = []
     Avg_density_traffic = []
+    Avg_speed_traffic = []
     Avg_traffic_flow_traffic = []
     Gap_to_front = []
     Ego_speed = []
@@ -149,8 +150,8 @@ if __name__=="__main__":
             if i == 0:
                 [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t] = sumo_sim_manager.sumo_veh[i].getVehicleStates()
                 veh_0_acc_t = 0.0
-                veh_0_spd_t = 25.0
-                veh_0_dist_t = veh_1_dist_t + 35
+                veh_0_spd_t = 30.0
+                veh_0_dist_t = veh_1_dist_t + 30
             else:
                 [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t] = sumo_sim_manager.sumo_veh[i-1].getVehicleStates()
                 [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t] = sumo_sim_manager.sumo_veh[i].getVehicleStates()
@@ -196,21 +197,26 @@ if __name__=="__main__":
             flow_dt = 0.0
             Avg_traffic_flow_traffic.append(num_veh_inflow/flow_interval*3600)
             Avg_density_traffic.append(len(unique_vehicle_id)/edge_len*1000)
+            Avg_speed_traffic.append(np.mean(Ego_speed))
             print('Traffic flow: ' + str(num_veh_inflow/flow_interval*3600) + " with density of " + str(len(unique_vehicle_id)/edge_len*1000))
         time.sleep(0.01)
     
-    traci.close(True)
+    traci.close(False)
     
     with open(controller_name + "_" + str(num_veh) + ".csv", 'w') as f:
         csv_writer = csv.writer(f)
         data_x = np.array(Avg_density_traffic)
         data_y = np.array(Avg_traffic_flow_traffic)
-        data = np.vstack((data_x, data_y)).T
-        csv_writer.writerow(['Traffic_Density', 'Traffic_Flow'])
+        data_z = np.array(Avg_speed_traffic)
+        data = np.vstack((data_x[1:], data_y[1:], data_z[1:])).T
+        csv_writer.writerow(['Traffic_Density', 'Traffic_Flow', 'Average_Speed'])
         csv_writer.writerows(data)
     
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
+    print('Average speed of traffic vehicles is: ', str(round(np.mean(Ego_speed), 4)), 'm/s')
     print('Runtime standard deviation is: ', str(round(np.std(runtime_record) * 1000, 4)), 'ms')
     
     plt.scatter(Avg_density_traffic, Avg_traffic_flow_traffic, s=15, c='red', label='Gap to front vs Ego speed')
-    plt.show()
+    plt.show(block=False)
+    plt.pause(1)
+    plt.close()
