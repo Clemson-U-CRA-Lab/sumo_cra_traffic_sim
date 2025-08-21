@@ -34,7 +34,7 @@ class sumo_sim():
             self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 30 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0)
 
     def start_Sumo(self):
-        sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
+        sumoCmd = [self.sumoBinary, "-c", self.sumoconfig, "--quit-on-end"]
         traci.start(sumoCmd)
     
     def simulationStepForward(self):
@@ -136,7 +136,7 @@ if __name__=="__main__":
     lead_s = 600.0
     end_s = 0.0
     
-    while sumo_sim_manager.step * 0.1 < 5: #record_t[-1] + 30:
+    while sumo_sim_manager.step * 0.1 < 10: #record_t[-1] + 30:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         runtime_dt = 0.0
