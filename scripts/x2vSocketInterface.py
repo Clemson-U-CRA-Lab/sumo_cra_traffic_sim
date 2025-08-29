@@ -47,7 +47,7 @@ class x2vSocketInterface:
         message = struct.pack(f'<{SIM_ARRAY_SIZE}f', *numbers_to_send)
         self.client_socket.sendto(message, self.server_address)
 
-    def recv_veh_info(self):
+    def get_veh_info(self):
         data = self.client_socket.recv(self.recvd_msg_bytes)
         veh_array = struct.unpack(f'<{VEH_ARRAY_SIZE}f', data)
         # print("Received from RSU: ", veh_array)
@@ -109,7 +109,7 @@ class x2vSocketInterfaceAsync:
                 print(f"Socket receive error: {e}")
                 break
 
-    def recv_veh_info(self):
+    def get_veh_info(self):
         """ Returns the latest received vehicle data without waiting. """
         with self.data_lock:
             return self.latest_veh_data  # Return last received data immediately

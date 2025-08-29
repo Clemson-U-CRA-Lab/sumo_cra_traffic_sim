@@ -33,7 +33,7 @@ class PCC_MPC_controller():
         self.a = 0.0
         self.svs = PCC(dirname, self.s, self.v, self.a, v_max=20)
         
-    def step_forward(self, PV_ds, PV_v, PV_a, future_s, future_v, t):
-        # Find control from MPC optimization and control the vehicle
-        pred_pose = self.svs.setCommand_SUMO(t=t, pv_ds=PV_ds, pv_v=PV_v, pv_a=PV_a, pv_ind=0, cycle_ss=future_s, cycle_vs=future_v)
+    # def step_forward(self, PV_ds, PV_v, PV_a, future_s, future_v, t):
+    #     # Find control from MPC optimization and control the vehicle
+    #     pred_pose = self.svs.setCommand_SUMO(t=t, pv_ds=PV_ds, pv_v=PV_v, pv_a=PV_a, pv_ind=0, cycle_ss=future_s, cycle_vs=future_v)
 

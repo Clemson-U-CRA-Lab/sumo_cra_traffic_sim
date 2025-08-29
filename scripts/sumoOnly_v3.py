@@ -22,9 +22,9 @@ data = np.zeros([int(END_TIME/SIM_STEP)+1,len(csv_header)])
 
 
 # Run params
-vizTraj = True
-guiSumo = False
-live_plt = True
+vizTraj = False
+guiSumo = True
+live_plt = False
 
 
 if __name__=="__main__":
@@ -61,7 +61,7 @@ if __name__=="__main__":
     front_s_t = np.array(leading_vehicle_speed_profile[:, 3])+20.0
 
     # Init SUMO sim
-    sumo_sim_manager = SumoSim(sumo_config_name=parent_dir + "/sumo/v2x/" + "/sumo/v2x/v2x_2veh.sumocfg")
+    sumo_sim_manager = SumoSim(sumo_config_name=parent_dir + "/sumo/v2x/" + "v2x_2veh.sumocfg")
     sumo_sim_manager.start_Sumo(gui=guiSumo)
 
 
@@ -95,6 +95,7 @@ if __name__=="__main__":
     # Inti and Setup controller
     if USING_ONLINE_MPC:
         online_MPC_control = PCC_MPC_controller(dirname=current_dirname)
+
     else:
         print('No controller for all vehicles')
         
@@ -117,6 +118,17 @@ if __name__=="__main__":
 
         # Get all vehicles currently in sim
         vehicle_list = traci.vehicle.getIDList()
+
+
+        if sim_time < 2*SIM_STEP:
+            for veh in vehicle_list:
+                traci.vehicle.setSpeed(veh, 0.0)
+                traci.vehicle.setMinGap(veh, 0.001) # try to avoid collision
+                traci.vehicle.setSpeedMode(veh, 96) # no safety, no auto
+                traci.vehicle.setLength(veh, 3.2) # set length
+            continue
+
+
 
         # Assign speeds to leading vehicle
         v_lead_id = np.argmin(np.abs([record_t - sim_time]))
@@ -141,11 +153,11 @@ if __name__=="__main__":
                                                        simStep=SIM_STEP, # unused
                                                        mpc_dt=MPC_DT,
                                                        mpc_ref_stages=MPC_REF_STAGES,
-                                                       cycle_dt=CYCLE_DT,
-                                                       cycle_stages= CYCLE_STAGES,
-                                                       PassIntention=BOOL_USE_FRONT_PRVIEW,
+                                                       cycle_dt=REF_CYCLE_DT,
+                                                       cycle_stages= REF_CYCLE_STAGES,
+                                                       PassIntention=BOOL_USE_FRONT_PREVIEW,
                                                        outputUsedCycleforFront=True,
-                                                       verbose=False
+                                                       verbose=True
                                                        )      
                 
         else:
@@ -153,6 +165,9 @@ if __name__=="__main__":
             for veh in vehicle_list:
                 acc[veh] = 0.0
         runtime_record.append(time.time() - start_t)
+
+        # if sim_time > 3:
+        #     time.sleep(.1)
 
         # viz traj
         if guiSumo and vizTraj:
@@ -165,10 +180,7 @@ if __name__=="__main__":
                                             colorChoice=(255,255,100), fill=False, layer=3)
             sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(0, 255, 2, 100), fill=False, layer=4)
            
-
-        # if local testing w/o gps:
-        sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SUMO_ACC_DT) # careful: assign commmand or real sensed acc?
-
+        sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SUMO_ACC_INTEGRATE_DT) # careful: assign commmand or real sensed acc?
 
         if live_plt:
             # Collect data for plotting
@@ -182,7 +194,7 @@ if __name__=="__main__":
             line_dist0.set_data(times, dist0)
             line_dist1.set_data(times, dist1)
             # plot reference distance shifted by current sim_time offset
-            ref_times = np.arange(CYCLE_STAGES) * CYCLE_DT + sim_time
+            ref_times = np.arange(REF_CYCLE_STAGES) * REF_CYCLE_DT + sim_time
             line_ref_s.set_data(ref_times, cycle_ss)
             axs[0].relim(); axs[0].autoscale_view()
 

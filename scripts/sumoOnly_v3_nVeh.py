@@ -109,9 +109,9 @@ if __name__=="__main__":
                 simStep=SIM_STEP, # unused
                 mpc_dt=MPC_DT,
                 mpc_ref_stages=MPC_REF_STAGES,
-                cycle_dt=CYCLE_DT,
-                cycle_stages= CYCLE_STAGES,
-                PassIntention=BOOL_USE_FRONT_PRVIEW,
+                cycle_dt=REF_CYCLE_DT,
+                cycle_stages= REF_CYCLE_STAGES,
+                PassIntention=BOOL_USE_FRONT_PREVIEW,
                 outputUsedCycleforFront=True,
                 verbose=True
             )
@@ -121,7 +121,7 @@ if __name__=="__main__":
 
         # Assign acceleration dynamically
         for veh in vehicle_list[1:]:
-            sumo_sim_manager.assignAcceleration(vehicle_ID=veh, tgt_acc=acc.get(veh, 0.0), dt=SUMO_ACC_DT)
+            sumo_sim_manager.assignAcceleration(vehicle_ID=veh, tgt_acc=acc.get(veh, 0.0), dt=SUMO_ACC_INTEGRATE_DT)
 
         # Logging and data collection
         for veh in vehicle_list:

@@ -31,21 +31,29 @@ import time
 import threading
 import random
 import struct
+import sys, os
+
+sys.path.append(os.path.abspath("/home/cra/sumo_ws/sumo_cra_traffic_sim/scripts"))
+from x2v_constants import *
 
 # === CONFIGURATION ===
-TARGET_IP = 'fe80::6e5:48ff:fe30:0820'   # RSU IP
-TARGET_PORT = 7002
-INTERFACE_SCOPE_ID = 7                    # Adjust for your NIC
+# TARGET_IP = 'fe80::6e5:48ff:fe30:0820'   # RSU IP
+# TARGET_PORT = 7002
+# INTERFACE_SCOPE_ID = 4                    # Adjust for your NIC
 
 # TARGET_IP = 'localhost'
 # TARGET_PORT = 7005
 # from scripts.x2v_constants import *
 
-NUM_FAST = 300      # fast flooding threads
-NUM_SLOW = 300      # slow-loris threads
-ATTACK_DURATION = 8  # seconds to run attack
+TARGET_IP = SERVER_IP
+TARGET_PORT = SERVER_PORT
 
-DELAY_BETWEEN_SENDS = 0.01  # flood delay (sec)
+
+NUM_FAST = 350      # fast flooding threads
+NUM_SLOW = 30      # slow-loris threads
+ATTACK_DURATION = 15  # seconds to run attack
+
+DELAY_BETWEEN_SENDS = 0.05  # flood delay (sec)
 LORIS_INTERVAL = (2, 5)   # slow loris drip interval range (sec)
 
 PAYLOAD_SIZE = 4096  # flood payload size

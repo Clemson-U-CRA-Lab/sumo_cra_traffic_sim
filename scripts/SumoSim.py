@@ -89,6 +89,8 @@ class SumoSim():
                 traci.vehicle.moveToXY(vehID=veh, edgeID=edge , laneIndex="0", x=pos[0], y=pos[1])
             if spd != None:
                 traci.vehicle.setSpeed(vehID=veh, speed=spd)
+            if dist != None:
+                traci.vehicle.moveTo(vehID=veh, laneID='76146229#1_0', pos=dist)
             if verbose:
                 print(f"{bcolors.ENDC}{veh}: Position {pos}, Speed {spd}{bcolors.ENDC}")
         except traci.TraCIException as e:

@@ -23,15 +23,35 @@ if logRunning_:
 
 # Comms
 asyncSocket = True
-if asyncSocket:
-    from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
-else:
-    from x2vSocketInterface import x2vSocketInterface as x2vSocketInterface
+# interface = 'periodicInterface' # 'latency'
+interface = 'periodicInterface' # 'latency', 'naiveAsync', 'hybrid', 'periodicInterface'
+
 
 # Run params
 guiSumo = True
-vizTraj = True
+vizTraj = False
 testWithoutGPS = True
+verbosity = False
+
+attack = True
+attack_intensity = 30 # how old a frame:
+# 30@10hz, 15@10hz, 5@10hz, 3@10hz, 30@100hz
+
+
+
+if asyncSocket:
+    if interface == 'periodicInterface':
+        from x2vSocketInterface_periodic import x2vSocketInterfaceAsync as x2vSocketInterface
+    elif interface == 'latency':
+        from x2vSocketInterface_latency import x2vSocketInterfaceAsync as x2vSocketInterface
+    elif interface == 'naiveAsync':
+        from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
+    elif interface == 'hybrid':
+        from x2vSocketInterface_hybrid import x2vSocketInterfaceAsync as x2vSocketInterface
+    else:
+        raise ValueError("Invalid interface type. Choose 'periodicInterface', 'latency', or 'naiveAsync'.")
+else:
+    from x2vSocketInterface import x2vSocketInterface as x2vSocketInterface
 
 
 if __name__=="__main__":
@@ -83,6 +103,7 @@ if __name__=="__main__":
     real_start_time = time.monotonic()  
     real_now = real_start_time
     sim_start_time = 0  # SUMO's starting simulation time
+    next_deadline = time.monotonic()
     while sumo_sim_manager.step < END_TIME/SIM_STEP:
 
         sim_time = traci.simulation.getTime()  # Get SUMO's current simulation time
@@ -94,6 +115,15 @@ if __name__=="__main__":
 
         # Get all vehicles currently in sim
         vehicle_list = traci.vehicle.getIDList()
+
+        if sim_time < 2*SIM_STEP:
+            for veh in vehicle_list:
+                traci.vehicle.setSpeed(veh, 0.0)
+                traci.vehicle.setMinGap(veh, 0.001) # try to avoid collision
+                traci.vehicle.setSpeedMode(veh, 96) # no safety, no auto
+                traci.vehicle.setLength(veh, 3.2) # set length
+                # These MUST be set after the first step, otherwise SUMO will ignore them.
+            continue
 
         # Assign speeds to leading vehicle
         v_lead_id = np.argmin(np.abs([record_t - sim_time]))
@@ -118,9 +148,9 @@ if __name__=="__main__":
                                                        simStep=SIM_STEP, # unused
                                                        mpc_dt=MPC_DT,
                                                        mpc_ref_stages=MPC_REF_STAGES,
-                                                       cycle_dt=CYCLE_DT,
-                                                       cycle_stages= CYCLE_STAGES,
-                                                       PassIntention=BOOL_USE_FRONT_PRVIEW,
+                                                       cycle_dt=REF_CYCLE_DT,
+                                                       cycle_stages= REF_CYCLE_STAGES,
+                                                       PassIntention=BOOL_USE_FRONT_PREVIEW,
                                                        outputUsedCycleforFront=True,
                                                        verbose=False
                                                        )
@@ -131,7 +161,7 @@ if __name__=="__main__":
         runtime_record.append(time.time() - start_t)
 
         # viz traj
-        if vizTraj:
+        if guiSumo and  vizTraj:
             sumo_sim_manager.add_traj_leader("nv0", 
                                             veh_states_matrix[0][3],
                                             record_t=record_t,
@@ -147,33 +177,88 @@ if __name__=="__main__":
             sim_nv_array = [sim_time, 
                             veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
                             veh_states_matrix[0][3], veh_states_matrix[0][2], veh_states_matrix[0][1]  # front
-                            ] + [veh_states_matrix[0][3]]*CYCLE_STAGES + [0.0]*CYCLE_STAGES # front's s, front's v
+                            ] + [veh_states_matrix[0][3]]*REF_CYCLE_STAGES + [0.0]*REF_CYCLE_STAGES # front's s, front's v
         else:
             # sim_time, ego_s, ego_v, ego_a  front_s, front_v, front_a, ...
             sim_nv_array = [sim_time, 
                             veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
                             veh_states_matrix[0][3], veh_states_matrix[0][2], veh_states_matrix[0][1]  # front
                             ] + [x for x in cycle_ss] + [x for x in cycle_vs] # front's s, front's v   
-        
+
+
+              #########
+      
         # Send NV states to realCAV
-        sockInt.send_sim_info(sim_nv_array)
-        # print(f"Send Front info: {sim_nv_array[0], sim_nv_array[1:4], sim_nv_array[4:7]}")
+        if interface == 'periodicInterface':
+            with sockInt.simData_lock:
+                sockInt.latest_sim_data = sim_nv_array
+        elif interface == 'hybrid':
+            sockInt.queue_sim_info(sim_nv_array)
+        elif interface == 'latency':
+            sockInt.send_sim_info(sim_nv_array)     
+        elif interface == 'naiveAsync':
+            sockInt.send_sim_info(sim_nv_array)
+        else:
+            raise ValueError("Invalid interface type. Choose 'periodicInterface', 'latency', or 'naiveAsync'.")
 
-        # Recv realCAV info and updat ereal CAV in sim
-        realCavArray = sockInt.recv_veh_info()
+            #########
+
+        realCavArray = sockInt.get_veh_info()
+
+        if attack:
+            if interface == 'latency' or interface == 'periodicInterface' or interface == 'naiveAsync':
+                # Simulate effect of stale control using a delay buffer
+                if not hasattr(sockInt, "control_buffer"):
+                    sockInt.control_buffer = []
+
+                sockInt.control_buffer.append(realCavArray)
+
+                delay_steps = attack_intensity  # e.g. 3×SIM_STEP = 300ms delay
+                if len(sockInt.control_buffer) >= delay_steps:
+                    delayedArray = sockInt.control_buffer.pop(0)
+                    realCavArray = delayedArray
+                    print(f"{bcolors.WARNING}Using delayed control (buffer size: {len(sockInt.control_buffer)}){bcolors.ENDC}")
+                
+
+
+        if interface == 'hybrid' and sim_time % 1.0 < SIM_STEP:
+            stats = sockInt.get_stats()
+            print(f"{bcolors.WARNING}[Hybrid Debug] Queue: {stats['queue_len']} | Jitter: {stats['jitter_s']:.3f}s{bcolors.ENDC}")
+
+        if interface == 'latency':
+            # === Debug: Observe DoS-induced latency ===
+            if sim_time % 1.0 < SIM_STEP:  # Print every ~1 second
+                stats = sockInt.get_stats()
+                qlen = stats["queue_len"]
+                jitter = stats["jitter_s"]
+                print(f"{bcolors.WARNING}[Latency Debug] Queue Length: {qlen} | Jitter: {jitter:.3f}s{bcolors.ENDC}")
+
+
+            #########
+
         if realCavArray is not None:        
-            print(f"{bcolors.OKCYAN}==============Got from VEH============{bcolors.ENDC}" )
-            # print(f"{bcolors.OKCYAN}Elapsed @ VEH Real: {realCavArray[6]:.2f}, {bcolors.OKBLUE}MPC got SimTime: {realCavArray[0]:.2f}.{bcolors.ENDC}" )
-            print(f"{bcolors.OKGREEN}Delta T RSPCSim-VEHReal: {(sim_time-realCavArray[6]):.2f}s{bcolors.ENDC}")
-            print(f"{bcolors.OKCYAN}Ego x,y: {realCavArray[4]:.2f}, {realCavArray[5]:.2f}.{bcolors.ENDC}" )
-            print(f"{bcolors.OKCYAN}Ego [GPS] s: -- , v:{realCavArray[2]:.2f}.{bcolors.ENDC}" )
-            print(f"{bcolors.OKCYAN}Ego MpcCmd: {realCavArray[7]:.2f}.{bcolors.ENDC}" )
+            if verbosity:
+                print(f"{bcolors.OKCYAN}==============Got from VEH============{bcolors.ENDC}" )
+                # print(f"{bcolors.OKCYAN}Elapsed @ VEH Real: {realCavArray[6]:.2f}, {bcolors.OKBLUE}MPC got SimTime: {realCavArray[0]:.2f}.{bcolors.ENDC}" )
+                print(f"{bcolors.OKGREEN}Delta T RSPCSim-VEHReal: {(sim_time-realCavArray[6]):.2f}s{bcolors.ENDC}")
+                print(f"{bcolors.OKCYAN}Ego x,y: {realCavArray[4]:.2f}, {realCavArray[5]:.2f}.{bcolors.ENDC}" )
+                print(f"{bcolors.OKCYAN}Ego [GPS] s: -- , v:{realCavArray[2]:.2f}.{bcolors.ENDC}" )
+                print(f"{bcolors.OKCYAN}Ego MpcCmd: {realCavArray[7]:.2f}.{bcolors.ENDC}" )
 
+            print(f"{bcolors.FAIL_RED}Delta MpcCmd: {realCavArray[7]- acc['nv1']:.2f} | {bcolors.OKBLUE}VehCmd: {realCavArray[7]:.3f} |  {bcolors.OKGREEN}ExpectSim: {acc['nv1']:.3f}.{bcolors.ENDC}" )
 
-            # Update Real CAV pos in simulation:::            
+            # collided = True if veh_states_matrix[0][3] - veh_states_matrix[1][3] < 3.2 else False
+
+            # Update Real CAV pos in simulation:         
             if testWithoutGPS:
                 # if local testing w/o gps:
-                sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=realCavArray[7], dt=SUMO_ACC_DT) # careful: assign commmand or real sensed acc?
+                sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=realCavArray[7], dt=SUMO_ACC_INTEGRATE_DT) # careful: assign commmand or real sensed acc?
+                # sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SUMO_ACC_INTEGRATE_DT) # careful: assign commmand or real sensed acc?
+
+                # sumo_sim_manager.update_CAV_in_sumo(veh='nv1', 
+                                                        # spd=realCavArray[2]+realCavArray[7]*SUMO_ACC_INTEGRATE_DT)
+                                                        # dist = realCavArray[2]*SUMO_ACC_INTEGRATE_DT  + 0.5*realCavArray[7]*SUMO_ACC_INTEGRATE_DT**2)            
+
             else:
                 # if testing with gps and vehicle run
                 sumo_sim_manager.update_CAV_in_sumo(veh='nv1', 
@@ -204,11 +289,21 @@ if __name__=="__main__":
 
         # Sleep timing
         real_now = time.monotonic()
-        if asyncSocket:
-            sleep_time = max(0, real_expected_time - real_now)  # Sleep only if ahead of real time
-            time.sleep(sleep_time)  # Sync with real-world time
-        print(f"{bcolors.OKGREEN}Delta T RSPC[Sim-Real]: {((real_now - real_start_time)-sim_time):.2f}s{bcolors.ENDC}")
+        # if asyncSocket:
+        #     sleep_time = max(0, real_expected_time - real_now)  # Sleep only if ahead of real time
+        #     time.sleep(sleep_time)  # Sync with real-world time
+        # print(f"{bcolors.OKGREEN}Delta T RSPC[Sim-Real]: {((real_now - real_start_time)-sim_time):.2f}s{bcolors.ENDC}")
     
+        ## Fixed rate scheduling.
+        if asyncSocket:
+            next_deadline += SIM_STEP         # fixed cadence
+            sleep_time = next_deadline - time.monotonic()
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+
+
+
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
     if testWithoutGPS:
         save_csv_sumo(data, file_prefix='sumIndoorVIL_log', csv_header=csv_header)
@@ -218,25 +313,27 @@ if __name__=="__main__":
     plt.figure(1)
     
     plt.subplot(3,1,1)
-    plt.plot(veh_sim_t, veh_0_dist,'k')
+    plt.plot(record_t, front_s_t, 'r:') 
+    plt.plot(veh_sim_t, veh_0_dist,'k--')
     plt.plot(veh_sim_t, veh_1_dist,'b--')
     # plt.plot(veh_sim_t, veh_3_dist)
     plt.xlabel('Time [s]')
     plt.ylabel('Distance from route edge [m]')
-    plt.legend(['Leading Vehicle',  'mache'])
+    plt.legend(['US06 Ref', 'Leading Vehicle',  'mache'])
     
     plt.subplot(3,1,2)
-    plt.plot(veh_sim_t, veh_0_spd, 'k')
+    plt.plot(record_t, front_v_t, 'r:') 
+    plt.plot(veh_sim_t, veh_0_spd, 'k--')
     plt.plot(veh_sim_t, veh_1_spd, 'b--')
     # plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Speed [m/s]')
-    plt.legend(['Leading Vehicle','mache'])
+    plt.legend(['US06 Ref', 'Leading Vehicle','mache'])
 
     plt.subplot(3,1,3)
-    plt.plot(veh_sim_t, veh_0_acc, 'k')
-    plt.plot(veh_sim_t, veh_1_acc,'b')
-    plt.plot(veh_sim_t, mache_accCmd, 'b--')
+    plt.plot(veh_sim_t, veh_0_acc, 'k--')
+    plt.plot(veh_sim_t, veh_1_acc,'b--')
+    plt.plot(veh_sim_t, mache_accCmd, 'g--')
     # plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Acc [m/s^2]')

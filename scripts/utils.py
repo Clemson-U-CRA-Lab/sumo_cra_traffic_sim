@@ -176,8 +176,8 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
                                          online_MPC_control, 
                                          simStep=0.2, mpc_dt=0.5, 
                                          mpc_ref_stages=32, 
-                                         cycle_dt = 0.1,
-                                         cycle_stages = 100,
+                                         cycle_dt = 0.5,
+                                         cycle_stages = 32,
                                          front_s_ = None,
                                          verbose=False,
                                          PassIntention=False,
@@ -210,9 +210,6 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
 
     cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=cycle_dt, initial=0) + nVehicleStatesMatrix[0][3]   # CHECK
     
-    print(f"{bcolors.HEADER_MAGENTA}SIM TIME: {sim_t:.2f}{bcolors.ENDC}")
-    for veh in nVehicleStatesMatrix:
-        print(f"{bcolors.HEADER_MAGENTA}{veh[0]} S: {veh[3]:.2f}, V: {veh[2]:.2f}{bcolors.ENDC}")
 
     # Iterate over states (excluding the leader)
     prev_pred_s, prev_pred_v = cycle_ss, cycle_vs
@@ -252,7 +249,11 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
             preds_v[nVehicleStatesMatrix[i][0]] = pred_v
             accelerations[nVehicleStatesMatrix[i][0]] = acc
 
+
         if verbose:
+            print(f"{bcolors.HEADER_MAGENTA}SIM TIME: {sim_t:.2f}{bcolors.ENDC}")
+            for veh in nVehicleStatesMatrix:
+                print(f"{bcolors.HEADER_MAGENTA}{veh[0]} S: {veh[3]:.2f}, V: {veh[2]:.2f}{bcolors.ENDC}")
             if i == 1:
                 # print(f"{bcolors.HEADER_MAGENTA}ego S: {ego_dist:.2f}, V: {ego_spd:.2f}{bcolors.ENDC}")
                 # print(f"{bcolors.HEADER_MAGENTA}Lead S: {pv_dist:.2f}, V: {pv_spd:.2f}{bcolors.ENDC}")
@@ -270,7 +271,7 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
             print(f"{bcolors.OKCYAN}Pred T for nv{i}: {len(pred_t)},{[f'{x:.2f}' for x in pred_t]}{bcolors.ENDC}")
             print(f"{bcolors.OKGREEN}Pred S for nv{i}: {len(pred_s)}, {[f'{x:.2f}' for x in pred_s]}{bcolors.ENDC}")
             print(f"{bcolors.OKBLUE}Pred V for nv{i}: {len(pred_v)}, {[f'{x:.2f}' for x in pred_v]}{bcolors.ENDC}")
-
+            print(f"{bcolors.OKGREEN}Here Computed Acc for nv{i}: {acc:.2f}{bcolors.ENDC}")
         # Store curent solved prediction for next vehicle's reference
         prev_pred_s, prev_pred_v = pred_s, pred_v
         

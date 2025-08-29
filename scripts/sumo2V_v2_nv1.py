@@ -130,7 +130,7 @@ if __name__=="__main__":
                                                        simStep=SIM_STEP,
                                                        mpc_dt=MPC_DT,
                                                        mpc_ref_stages=MPC_REF_STAGES,
-                                                       PassIntention=BOOL_USE_FRONT_PRVIEW,
+                                                       PassIntention=BOOL_USE_FRONT_PREVIEW,
                                                        outputUsedCycleforFront=True,
                                                        )
         else:
@@ -169,7 +169,7 @@ if __name__=="__main__":
         # print(f"Send Front info: {lead_nv_array[0], lead_nv_array[1:4], lead_nv_array[4:7]}")
 
         # Recv realCAV info and updat ereal CAV in sim
-        realCavArray = sockInt.recv_veh_info()
+        realCavArray = sockInt.get_veh_info()
         if realCavArray is not None:        
             print(f"{bcolors.OKCYAN}==============Got from VEH============{bcolors.ENDC}" )
             # print(f"{bcolors.OKCYAN}Elapsed @ VEH Real: {realCavArray[6]:.2f}, {bcolors.OKBLUE}MPC got SimTime: {realCavArray[0]:.2f}.{bcolors.ENDC}" )

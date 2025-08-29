@@ -23,9 +23,9 @@ if logRunning_:
 # Comms
 asyncSocket = True
 if asyncSocket:
-    from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
+    from x2vSocketInterface_periodic import x2vSocketInterfaceAsync as x2vSocketInterface
 else:
-    from x2vSocketInterface import x2vSocketInterface as x2vSocketInterface
+    from x2vSocketInterface_periodic import x2vSocketInterface as x2vSocketInterface
 
 # Run params
 guiSumo = True
@@ -116,9 +116,9 @@ if __name__=="__main__":
                 simStep=SIM_STEP, # unused
                 mpc_dt=MPC_DT,
                 mpc_ref_stages=MPC_REF_STAGES,
-                cycle_dt=CYCLE_DT,
-                cycle_stages= CYCLE_STAGES,
-                PassIntention=BOOL_USE_FRONT_PRVIEW,
+                cycle_dt=REF_CYCLE_DT,
+                cycle_stages= REF_CYCLE_STAGES,
+                PassIntention=BOOL_USE_FRONT_PREVIEW,
                 outputUsedCycleforFront=True,
                 verbose=False
             )
@@ -141,7 +141,7 @@ if __name__=="__main__":
             sim_nv_array = [sim_time, 
                             veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
                             veh_states_matrix[0][3], veh_states_matrix[0][2], veh_states_matrix[0][1]  # front
-                            ] + [veh_states_matrix[0][3]]*CYCLE_STAGES + [0.0]*CYCLE_STAGES # front's s, front's v
+                            ] + [veh_states_matrix[0][3]]*REF_CYCLE_STAGES + [0.0]*REF_CYCLE_STAGES # front's s, front's v
         else:
             # sim_time, ego_s, ego_v, ego_a  front_s, front_v, front_a, ...
             sim_nv_array = [sim_time, 
@@ -155,10 +155,10 @@ if __name__=="__main__":
 
         #update SUMO vehicles
         for veh in vehicle_list[1:-1]:  # Skip nv0 and realCAV
-            sumo_sim_manager.assignAcceleration(vehicle_ID=veh, tgt_acc=acc.get(veh, 0.0), dt=SUMO_ACC_DT)
+            sumo_sim_manager.assignAcceleration(vehicle_ID=veh, tgt_acc=acc.get(veh, 0.0), dt=SUMO_ACC_INTEGRATE_DT)
 
         # Recv realCAV info and updat ereal CAV in sim
-        realCavArray = sockInt.recv_veh_info()
+        realCavArray = sockInt.get_veh_info()
         if realCavArray is not None:        
             print(f"{bcolors.OKCYAN}==============Got from VEH============{bcolors.ENDC}" )
             # print(f"{bcolors.OKCYAN}Elapsed @ VEH Real: {realCavArray[6]:.2f}, {bcolors.OKBLUE}MPC got SimTime: {realCavArray[0]:.2f}.{bcolors.ENDC}" )
@@ -171,7 +171,7 @@ if __name__=="__main__":
         realCAVName = vehicle_list[-1]  # Assuming the last vehicle in the list is the real CAV
         if testWithoutGPS:
             # if local testing w/o gps:
-            sumo_sim_manager.assignAcceleration(vehicle_ID=realCAVName, tgt_acc=realCavArray[7], dt=SUMO_ACC_DT) # careful: assign commmand or real sensed acc?
+            sumo_sim_manager.assignAcceleration(vehicle_ID=realCAVName, tgt_acc=realCavArray[7], dt=SUMO_ACC_INTEGRATE_DT) # careful: assign commmand or real sensed acc?
         else:
             # if testing with gps and vehicle run
             sumo_sim_manager.update_CAV_in_sumo(veh=realCAVName, 

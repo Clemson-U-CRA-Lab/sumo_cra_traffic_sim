@@ -3,7 +3,7 @@
 <routes>
     <!-- Define vehicle types -->
     <!-- <vType id="car" accel="3.6" decel="5.5" sigma="0.3" length="3.2" maxSpeed="15"/> -->
-    <vType id="car" sigma="0.3" length="3.2" maxSpeed="20" speedMode='96' minGap="0.1" accel="5.0" decel="8.5"/>
+    <vType id="car" sigma="0.3" length="3.2" maxSpeed="20" minGap="0.01" accel="5.0" decel="8.5"/>
 
     <!-- Define routes -->
     <route id="route1" edges="76146229#1"/>

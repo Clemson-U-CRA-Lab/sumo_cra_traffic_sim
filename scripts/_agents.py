@@ -100,8 +100,8 @@ class PCC(_vehicle):
             pv_state[0] = self.api.inputs_p.contents.pos_pred[k]
             pv_state[1] = self.api.inputs_p.contents.vel_pred[k]
 
-        print(f"Pred T: {[f'{x:.2f}' for x in self.api.inputs_p.contents.time_pred[0:n_pred_steps]]}")
-        print(f"Pred S : {[f'{x:.2f}' for x in self.api.inputs_p.contents.pos_pred[0:n_pred_steps]]}")
+        # print(f"Pred T: {[f'{x:.2f}' for x in self.api.inputs_p.contents.time_pred[0:n_pred_steps]]}")
+        # print(f"Pred S : {[f'{x:.2f}' for x in self.api.inputs_p.contents.pos_pred[0:n_pred_steps]]}")
 
     def setPred(self, t, pv_state, cycle_ss, cycle_vs, cycle_dt, n_pred_steps):
         # CHECK
@@ -160,7 +160,7 @@ class PCC(_vehicle):
             pv_state[1] = 0 # pv v
             pv_state[2] = 0 # pv a
 
-        self.dgap = pv_s - ego_s
+        self.dgap = pv_s - ego_s - 3.25
 
         # Reset the prediction inputs - just in case it is needed
         c_array_len = 201 # The total len of the c array - match with the _cppwrapper.py and their equivalent definitions in the EXTU struct found in longitudinal_mpc.h
@@ -213,8 +213,10 @@ class PCC(_vehicle):
         vel_traj = state_trajectory[1::n_states] # Vel state starts at index 1
         # acc_traj = state_trajectory[2::n_states] # Acc state starts at index 2    
 
-        # print(f"Pred T: {[f'{x:.2f}' for x in pos_traj]}")
-        # print(f"Pred S : {[f'{x:.2f}' for x in vel_traj]}")
+        # print(f"Pred S - shifted Bumper: {[f'{x-3.25:.2f}' for x in pos_traj]}")
+        # print(f"Pred V : {[f'{x:.2f}' for x in vel_traj]}")
+
+        
 
         # # Slack variables
         # # We can monitor the slack variables to see if the MPC feels safe in the current situation

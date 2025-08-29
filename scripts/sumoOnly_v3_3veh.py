@@ -154,9 +154,9 @@ if __name__=="__main__":
                                                        simStep=SIM_STEP, # unused
                                                        mpc_dt=MPC_DT,
                                                        mpc_ref_stages=MPC_REF_STAGES,
-                                                       cycle_dt=CYCLE_DT,
-                                                       cycle_stages= CYCLE_STAGES,
-                                                       PassIntention=BOOL_USE_FRONT_PRVIEW,
+                                                       cycle_dt=REF_CYCLE_DT,
+                                                       cycle_stages= REF_CYCLE_STAGES,
+                                                       PassIntention=BOOL_USE_FRONT_PREVIEW,
                                                        outputUsedCycleforFront=True,
                                                        verbose=True
                                                        )      
@@ -174,14 +174,14 @@ if __name__=="__main__":
                                             record_t=record_t,
                                             front_v_t=front_v_t,
                                             sim_t=sim_time,
-                                            pred_dt=CYCLE_DT, mpc_ref_stages=CYCLE_STAGES,
+                                            pred_dt=REF_CYCLE_DT, mpc_ref_stages=REF_CYCLE_STAGES,
                                             colorChoice=(255,255,100), fill=False, layer=3)
             sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(0, 255, 2, 100), fill=False, layer=4)
 
 
         # if local testing w/o gps:
-        sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SUMO_ACC_DT) # careful: assign commmand or real sensed acc?
-        sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=acc['nv2'], dt=SUMO_ACC_DT) # careful: assign commmand or real sensed acc?
+        sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SUMO_ACC_INTEGRATE_DT) # careful: assign commmand or real sensed acc?
+        sumo_sim_manager.assignAcceleration(vehicle_ID="nv2", tgt_acc=acc['nv2'], dt=SUMO_ACC_INTEGRATE_DT) # careful: assign commmand or real sensed acc?
 
 
         if live_plt:
@@ -199,7 +199,7 @@ if __name__=="__main__":
             line_dist1.set_data(times, dist1)
             line_dist2.set_data(times, dist2)
             # plot reference distance shifted by current sim_time offset
-            ref_times = np.arange(CYCLE_STAGES) * CYCLE_DT + sim_time
+            ref_times = np.arange(REF_CYCLE_STAGES) * REF_CYCLE_DT + sim_time
             line_ref_s.set_data(ref_times, cycle_ss)
             axs[0].relim(); axs[0].autoscale_view()
 

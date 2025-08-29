@@ -95,7 +95,7 @@ if __name__=="__main__":
 
         
         # if local testing w/o gps:
-        # sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SUMO_ACC_DT) # careful: assign commmand or real sensed acc?
+        # sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SUMO_ACC_INTEGRATE_DT) # careful: assign commmand or real sensed acc?
         # time.sleep(0.05)
         if len(veh_states_matrix) < 2 and sim_time > 1:
             break
