@@ -33,9 +33,6 @@ vizTraj = False
 testWithoutGPS = True
 verbosity = False
 
-attack = True
-attack_intensity = 30 # how old a frame:
-# 30@10hz, 15@10hz, 5@10hz, 3@10hz, 30@100hz
 
 
 
@@ -122,6 +119,9 @@ if __name__=="__main__":
                 traci.vehicle.setMinGap(veh, 0.001) # try to avoid collision
                 traci.vehicle.setSpeedMode(veh, 96) # no safety, no auto
                 traci.vehicle.setLength(veh, 3.2) # set length
+                traci.vehicle.setAccel(veh, 8.0) # set max accel
+                traci.vehicle.setDecel(veh, 8.0) # set max decel
+                # traci.vehicle.setTau(veh, 0.1) # reaction time
                 # These MUST be set after the first step, otherwise SUMO will ignore them.
             continue
 
@@ -205,7 +205,8 @@ if __name__=="__main__":
 
         realCavArray = sockInt.get_veh_info()
 
-        if attack:
+        if BOOL_ATTACK:
+            # this only works as epxected for indoor VIL but, youre nto sending the delays to vehicle. Just updating it late in sim.
             if interface == 'latency' or interface == 'periodicInterface' or interface == 'naiveAsync':
                 # Simulate effect of stale control using a delay buffer
                 if not hasattr(sockInt, "control_buffer"):
@@ -213,7 +214,7 @@ if __name__=="__main__":
 
                 sockInt.control_buffer.append(realCavArray)
 
-                delay_steps = attack_intensity  # e.g. 3×SIM_STEP = 300ms delay
+                delay_steps = ATTACK_INTENSITY  # e.g. 3×SIM_STEP = 300ms delay
                 if len(sockInt.control_buffer) >= delay_steps:
                     delayedArray = sockInt.control_buffer.pop(0)
                     realCavArray = delayedArray
@@ -277,7 +278,7 @@ if __name__=="__main__":
             mache_accCmd.append(realCavArray[7])
         
             veh_sim_t.append(sim_time)
-            data[sumo_sim_manager.step,:] = ([real_now-real_start_time, sim_time, time.time() - start_t,
+            data[sumo_sim_manager.step,:] = ([real_now-real_start_time, sim_time, realCavArray[0], time.time() - start_t,
                         veh_states_matrix[0][3],0.0,veh_states_matrix[0][2],veh_states_matrix[0][1],
                         veh_states_matrix[1][3],0.0,veh_states_matrix[1][2],veh_states_matrix[1][1], realCavArray[7]])
             

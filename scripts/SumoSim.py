@@ -31,7 +31,7 @@ class SumoSim():
         
     def start_Sumo(self, gui=True):
         if gui:
-            sumoCmd = [self.sumoBinary, "-c", self.sumoconfig]
+            sumoCmd = [self.sumoBinary, "-c", self.sumoconfig, "--quit-on-end"]
         else:
             sumoCmd = [self.sumoBinaryNoGUI, "-c", self.sumoconfig]
         traci.start(sumoCmd)

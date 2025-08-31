@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 import csv
 
-csv_header = ["Realtime [sec]","Sim Time [sec]", "MPC runtime",\
+csv_header = ["Realtime [sec]","Sim Time [sec]", "Sim Time from MPC [sec]", "MPC runtime",\
                 "v0_dist [m]","v0_lane [-]","v0_spd [m/s]","v0_acc [m/s2]",\
                 "v1_dist [m]","v1_lane [-]","v1_spd [m/s]","v1_acc [m/s2]","v1_accCmd [m/s2]"]
 
@@ -17,6 +17,7 @@ def save_csv_sumo(data, file_prefix='sumo_v2x_log', csv_header=None):
     if csv_header is None:
         csv_header = ["Realtime [sec]",\
                             "Sim Time [sec]", \
+                            "Sim Time from MPC [sec]",\
                             "MPC runtime",\
                             "v0_dist [m]",\
                             "v0_lane [-]",\

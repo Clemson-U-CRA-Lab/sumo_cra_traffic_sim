@@ -123,9 +123,12 @@ if __name__=="__main__":
         if sim_time < 2*SIM_STEP:
             for veh in vehicle_list:
                 traci.vehicle.setSpeed(veh, 0.0)
-                traci.vehicle.setMinGap(veh, 0.001) # try to avoid collision
+                traci.vehicle.setMinGap(veh, 0.001) # touching is collision
                 traci.vehicle.setSpeedMode(veh, 96) # no safety, no auto
                 traci.vehicle.setLength(veh, 3.2) # set length
+                traci.vehicle.setDecel(veh, 8.0) # set max decel
+                traci.vehicle.setAccel(veh, 8.0)
+                traci.vehicle.setEmergencyDecel(veh, 8.0)
             continue
 
 
@@ -179,7 +182,7 @@ if __name__=="__main__":
                                             pred_dt=MPC_DT, mpc_ref_stages=MPC_REF_STAGES,
                                             colorChoice=(255,255,100), fill=False, layer=3)
             sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(0, 255, 2, 100), fill=False, layer=4)
-           
+
         sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SUMO_ACC_INTEGRATE_DT) # careful: assign commmand or real sensed acc?
 
         if live_plt:
@@ -220,7 +223,7 @@ if __name__=="__main__":
     
         veh_sim_t.append(sim_time)
 
-        data[sumo_sim_manager.step,:] = ([real_now-real_start_time, sim_time, time.time() - start_t,
+        data[sumo_sim_manager.step,:] = ([real_now-real_start_time, sim_time, sim_time, time.time() - start_t,
                 veh_states_matrix[0][3],0.0,veh_states_matrix[0][2],veh_states_matrix[0][1],
                 veh_states_matrix[1][3],0.0,veh_states_matrix[1][2],veh_states_matrix[1][1], acc['nv1']])
     
@@ -270,7 +273,7 @@ if __name__=="__main__":
     plt.ylabel('Acc [m/s^2]')
     plt.legend(['Leading Vehicle', 'mache', 'mache_accCmd'])
     
-    # plt.savefig('sumo_'+ datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.png')
+    plt.savefig('sumoSim_'+ datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.png')
 
     plt.show()
     
