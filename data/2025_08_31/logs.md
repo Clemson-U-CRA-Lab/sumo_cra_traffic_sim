@@ -64,7 +64,7 @@ r11 - prev
     - 2.48pm
 
 
------> at 10 sec -- use al of these
+-----> at 10 sec -- use all of these
 
 r12 - prev
     - 2/0
@@ -127,7 +127,7 @@ r21  - prev
 r22 - prev
     - 0.5/10
     - rou1
-    - 4.03pm
+    - 4.02pm
     -  no colls
 
 r23 - prev
@@ -183,14 +183,23 @@ r30 - pred
     - 2/19
     - rou1
     - 1 coll at end
-    - 4.43pm
+    - 4.42pm
 
 
 r31 - preview
     - 2/19
     - rou2
     - no coll (may have touched at 91 seconds)
+    - 4.45pm
 
 
 
     
+TODO:
+
+
+1. rerun 2/20 prev on route 2. downhill caused the collision at end.
+2. rerun 1/20 0.5/20 prev on route 2
+
+3. run fallback strategy
+
