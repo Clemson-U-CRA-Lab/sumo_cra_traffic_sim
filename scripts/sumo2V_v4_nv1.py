@@ -30,7 +30,7 @@ interface = 'periodic_sendDelay' # 'latency', 'naiveAsync', 'hybrid', 'periodicI
 # Run params
 guiSumo = True
 vizTraj = False
-testWithoutGPS = False
+testWithoutGPS = BOOL_TEST_WITHOUT_GPS
 verbosity = False
 
 

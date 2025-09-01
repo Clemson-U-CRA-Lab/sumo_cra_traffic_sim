@@ -201,5 +201,7 @@ TODO:
 1. rerun 2/20 prev on route 2. downhill caused the collision at end.
 2. rerun 1/20 0.5/20 prev on route 2
 
+3. run 0.75/10  for both
+
 3. run fallback strategy
 
