@@ -10,9 +10,9 @@ TODO:
 
 
 
-
 ------> 20 sec
 
+r1, r2, r3 are rerun on route 2 because earler was on route1 and downhill would yield inaccruate control for this one. use these instead of the ones did on 31 Aug 2025.
 
 r1  - prev 
     - 2/20
@@ -28,10 +28,11 @@ r2  - prev
 r3  - prev
     - 0.5/20
     - rou2
-    - 
+    - 5.34pm
 
+r32 - was to establish fairness. Running pred on route-2 and checking if its somewhat simialr to route1. Since there is still a collision, all good with 31 aug one.
 
-rXX - pred
+r32 - pred
     - 2/20
     - rou2
     - 7.22pm
@@ -63,7 +64,7 @@ r7  - prev
     - 5.46pm
     - no colls
 
------------------------
+
 -------> fallback controller
 
 ---> CARRY mode [no colls unless noted here]
@@ -81,7 +82,7 @@ r9  - prev+fallback
 r10  - prev+fallback
     - rou2
     - 0.5/10
-    - 6.05
+    - 6.04
 
 r11  - prev+fallback
     - rou2
@@ -125,7 +126,7 @@ r16  - prev+fallback
 r17  - prev+fallback
     - rou2
     - 0.5/20
-    - 6.29pm
+    - 6.28pm
 
 
 r18  - prev+fallback
@@ -210,7 +211,17 @@ r31  - prev+fallback
 
  ---------------------------------
 
+
+
  ----->  Base PRed with Intention Fallback.
+hybrid_node.py
+
+r33  - pred_prevFallback
+    - rou2
+    - 2/20
+    - 7.43pm
+
+
 
 r  - pred_prevfallback
     - rou2
@@ -247,13 +258,6 @@ r - pred_prevFallback
     - rou2
     - 2/10
     - 
- 
-
-r  - pred_prevFallback
-    - rou2
-    - 2/20
-    - 
-
 
 r  - pred_prevFallback
     - rou2
@@ -275,3 +279,9 @@ r  - pred_prevFallback
     - rou2
     - 2/19
     - 
+
+
+
+#### Analysis:
+
+fallback runs mpc rnode had a bug where pv_acc=0 to ego mpc whenevr fallback was acrtive. 

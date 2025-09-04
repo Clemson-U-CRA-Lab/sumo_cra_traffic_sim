@@ -1,5 +1,8 @@
 LOGS
 
+
+for LCSS paper: runs form 31 Aug, 1 Sep 2025.
+
 DIRECT --->
 10hz COMMS AT RSPC, 20hzcomms at vheicle
 sumo2V_v4_nv1.py
@@ -56,11 +59,13 @@ r9  - pred
 r10 - prev
     - 1/20
     - no colls
+    - rou1
     - 2.45pm
 
 r11 - prev
     - 0.5/20
     - no colls
+    - rou1
     - 2.48pm
 
 
