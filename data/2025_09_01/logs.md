@@ -284,4 +284,7 @@ r  - pred_prevFallback
 
 #### Analysis:
 
-fallback runs mpc rnode had a bug where pv_acc=0 to ego mpc whenevr fallback was acrtive. 
+- fallback runs mpc rnode had a bug where pv_acc=0 to ego mpc whenevr fallback Stop mode was active. H
+owever, this does not affect results much for 'Stop" and "carry" fallback strategy. I checked by running in sim again on 4 Spe 2025.
+
+

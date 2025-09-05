@@ -1,19 +1,19 @@
 # TCP Socket Setup
 # for via cohda RSU.
-# SERVER_IP = 'fe80::6e5:48ff:fe30:0820'  # RSU IP address (modify as necessary)
-# SERVER_PORT = 7002  # Server port
+SERVER_IP = 'fe80::6e5:48ff:fe30:0820'  # RSU IP address (modify as necessary)
+SERVER_PORT = 7002  # Server port
 
 # same machine testing only
 # SERVER_IP = 'localhost'
 # SERVER_PORT = 7002
 
 # for direct to nuvo
-SERVER_IP = 'fe80::71c1:df07:f5d:c1f0' 
-SERVER_PORT = 7003
+# SERVER_IP = 'fe80::71c1:df07:f5d:c1f0' 
+# SERVER_PORT = 7003
 
 # TCP Socket Setup
 TIMEOUT = 5  # Timeout
-INTERFACE_SCOPE_ID = 6
+INTERFACE_SCOPE_ID = 7
 
 # SUMO params and run params
 SIM_STEP = 0.1
@@ -30,7 +30,7 @@ REF_CYCLE_STAGES = 32 # 32, 100
 # MPC config - dont change DT
 MPC_DT = 0.5
 MPC_REF_STAGES = 32 
-BOOL_USE_FRONT_PREVIEW = False   # use preview of front's intention for ego's mpc?
+BOOL_USE_FRONT_PREVIEW = True   # use preview of front's intention for ego's mpc?
 # If True, its intention sharing , if False, setPred() is used
 
 # For V2X and X2V interfaces
@@ -42,16 +42,16 @@ VEH_ARRAY_SIZE = 68 # 7 for simple msg
 # for 100 stages, sim_array_size = 207
 BYTE_SIZE = 4 #8 tested with obu/rsu
 MESSAGE_BYTE_LENGTH = BYTE_SIZE*VEH_ARRAY_SIZE
-INTERFACE_SCOPE_ID = 8
 
 # Attack:
 BOOL_ATTACK = True
+
 # ATTACK_INTENSITY = 30 # how old a frame: - 
 # 30@10hz, 15@10hz, 5@10hz, 3@10hz, 30@100hz
 DELAY_SECONDS = 2.0
-ATTACK_START_TIME = 20.0 # seconds into the sim when attack starts
+ATTACK_START_TIME = 22.0 # seconds into the sim when attack starts
 ATTACK_ACTIVE = False
 
 
 # indoor or outdoor VIL?:
-BOOL_TEST_WITHOUT_GPS = False
+BOOL_TEST_WITHOUT_GPS = True

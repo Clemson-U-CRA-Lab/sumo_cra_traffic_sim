@@ -11,11 +11,11 @@
 
     <!-- Assign vehicles to routes -->
     <!-- # switch route value to start on other end  -->
-    <vehicle id="nv0" type="car" route="route2" depart="0" departPos="20"/>
+    <vehicle id="nv0" type="car" route="route1" depart="0" departPos="20"/>
     <!-- <vehicle id="nv1" type="car" route="route1" depart="0" departPos="0" color="1,0.5,0.5"/> -->
 
     <!-- MachE is nv1 -->
-    <vehicle id="nv1" type="car" route="route2" depart="0" departLane="best" departPos="0" color="0,1,0" /> 
+    <vehicle id="nv1" type="car" route="route1" depart="0" departLane="best" departPos="0" color="0,1,0" /> 
 
     <!-- <vehicle id="veh4" type="car" route="route1" depart="3"/>
     <vehicle id="veh2" type="car" route="route2" depart="5"/>
