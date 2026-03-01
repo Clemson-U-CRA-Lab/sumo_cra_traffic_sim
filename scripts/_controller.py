@@ -75,7 +75,10 @@ class NN_controller():
         self.nn_controller.eval()
         self.nn_controller.load_state_dict(torch.load(nn_pt_file, map_location='cpu'))
         self.nn_controller.to('cuda')
-        self.IDM_brake = IDM(a=3, b=3, s0=5, v0=20, T=5)
+    
+    def CBF_acceleration_bound_check(self, pv_vt, s_vt, pv_st, s_st, tao, alpha, L):
+        a_ego_max = (pv_vt - s_vt + alpha * (pv_st - s_st - L - tao * s_vt)) / tao
+        return a_ego_max
     
     def step_forward(self, s_vt, pv_vt, s_st, pv_st, s_at, pv_at, use_prediction_horizon, sim_t):
         ttc_i = TTCi_estimate(ego_v=s_vt, front_v=pv_vt, front_s=pv_st - s_st)
@@ -109,18 +112,11 @@ class NN_controller():
         with torch.no_grad():
             ego_a_nn = self.nn_controller.forward(nn_input)
             s_a_nn = ego_a_nn.flatten().tolist()
-            
-        # Compute intelligent driver model control
-        s_a_IDM = self.IDM_brake.IDM_acceleration(front_v=pv_vt, ego_v=s_vt, front_s=pv_st, ego_s=s_st)
         
-        # Check the if IDM braking is needed
-        if len(s_a_IDM) > 0:
-            det = ((ttc_i > 0.25) * (pv_st - s_st < 15)).astype(bool)
-            IDM_w = det.astype(float)
-            ego_a_tgt = IDM_w * s_a_IDM + (1.0 - IDM_w) * s_a_nn
-        else:
-            ego_a_tgt = None
-            
+        # Check if CBF safety constraint is violated
+        a_ego_max = self.CBF_acceleration_bound_check(pv_vt=pv_vt, s_vt=s_vt, pv_st=pv_st, s_st=s_st, tao=2.0, alpha=1.0, L=7.5)
+        ego_a_tgt = np.minimum(s_a_nn, a_ego_max)
+        
         return ego_a_tgt
     
 class lookup_table_controller():

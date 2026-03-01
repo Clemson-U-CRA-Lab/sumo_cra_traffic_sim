@@ -31,7 +31,7 @@ class sumo_sim():
         self.num_veh = num_vehicle
         self.sumo_veh = [None]*num_vehicle
         for i in range(self.num_veh):
-            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 30 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0)
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 30 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0, sumo_brake=False)
 
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig, "--quit-on-end"]
@@ -136,7 +136,7 @@ if __name__=="__main__":
     lead_s = 600.0
     end_s = 0.0
     
-    while sumo_sim_manager.step * 0.1 < 10: #record_t[-1] + 30:
+    while sumo_sim_manager.step * 0.1 < record_t[-1] + 30:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         runtime_dt = 0.0
@@ -258,7 +258,7 @@ if __name__=="__main__":
             data_logger(sim_t=sim_t, ego_a=veh_1_acc_t, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
                         pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename= args.leading_speed_profile + "_" + controller_name + ".csv")
         
-        time.sleep(0.001)
+        time.sleep(0.01)
     
     traci.close(True)
     

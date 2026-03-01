@@ -84,7 +84,7 @@ class SUMO_vehicles():
         #     traci.vehicle.moveToXY(self.ID, edgeID="E3_0", laneIndex=0, x=self.s - 1000,y=0)
         traci.vehicle.setParameter(objectID=self.ID, key='vClass', value='evehicle')
         traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=lane_change_mode)
-        if sumo_brake:
+        if not sumo_brake:
             traci.vehicle.setSpeedMode(vehID=self.ID, speedMode=96)
     
     def update_preceding_traffic_light(self, TL_s):
