@@ -25,7 +25,7 @@ class x2vSocketInterfaceAsync:
     '''
     def __init__(
             self, 
-            ip=SERVER_IP, 
+            ip=RSU_IPV4, 
             tx_port=TX_UDP_PORT, 
             rx_port=RX_UDP_PORT, 
             timeout=TIMEOUT, 
@@ -34,14 +34,13 @@ class x2vSocketInterfaceAsync:
         self.ip = ip
         self.send_port = tx_port
         self.recv_port = rx_port
-        # decide whether we're using IPv4 or IPv6 based on the address string
         self.server_address = (ip, self.send_port)
 
         self.timeout = timeout
         self.recvd_msg_bytes = recv_bytes
         self.send_socket, self.recv_socket = self.setup_udp_sockets()
 
-        self.verbose = True
+        self.verbose = False
         
         # Store the latest received data
         self.latest_veh_data = None
@@ -57,14 +56,14 @@ class x2vSocketInterfaceAsync:
         self.send_thread = threading.Thread(target=self._send_loop, daemon=True)
 
         self.recv_thread.start()
-        # self.send_thread.start()
+        self.send_thread.start()
 
     def setup_udp_sockets(self):
         send_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        send_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1 << 20)
+        send_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1 << 5)
 
         recv_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        recv_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)
+        recv_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 5)
 
         # bind appropriately for IPv4
         recv_socket.bind((RSPC_IPV4, self.recv_port))
@@ -92,12 +91,14 @@ class x2vSocketInterfaceAsync:
                     if self.verbose:
                         print(f"Socket receive warning: short UDP frame ({len(frame)} bytes)")
                     continue
+
                 veh_array = struct.unpack(f'<{VEH_ARRAY_SIZE}f', frame[:frame_len])
                 with self.data_lock:
                     self.latest_veh_data = veh_array
                     # self.vehData_queue.append(veh_array)
                 if self.verbose:
                     print(f"<------RSPC recvd from RSU<-OBU: SimTime {veh_array[0]:.2f}")
+
         except socket.error as e:
             print(f"Socket receive error: {e}")
             

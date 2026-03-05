@@ -1,9 +1,13 @@
 # TCP Socket Setup
 # for via cohda RSU.
+
+# udp
 RSPC_IPV4 = '192.168.74.170'
+RSU_IPV4 = '192.168.74.200'
+
+# tcp
 SERVER_IP = 'fe80::6e5:48ff:fe30:0820'  # RSU IP address
 SERVER_PORT = 7002  # Server port
-SERVER_IPV4 = '192.168.74.200'
 
 # same machine testing only
 # RSPC_IPV4 = 'localhost'
@@ -64,4 +68,4 @@ ATTACK_ACTIVE = False
 
 
 # indoor or outdoor VIL?:
-BOOL_TEST_WITHOUT_GPS = True
+BOOL_TEST_WITHOUT_GPS = False

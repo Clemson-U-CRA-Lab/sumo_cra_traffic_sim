@@ -1,7 +1,7 @@
 import socket
 import struct
 
-UDP_IP = "0.0.0.0"   # listen on all interfaces
+UDP_IP = "192.168.74.170"   # listen on all interfaces
 UDP_PORT = 9002
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
