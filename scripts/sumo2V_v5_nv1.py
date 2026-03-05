@@ -36,16 +36,7 @@ verbosity = False
 
 if asyncSocket:
     if interface == 'periodicInterface':
-        from x2vSocketInterface_periodic import x2vSocketInterfaceAsync as x2vSocketInterface
-    elif interface == 'latency':
-        from x2vSocketInterface_latency import x2vSocketInterfaceAsync as x2vSocketInterface
-    elif interface == 'naiveAsync':
-        from x2vSocketInterface import x2vSocketInterfaceAsync as x2vSocketInterface
-    elif interface == 'hybrid':
-        from x2vSocketInterface_hybrid import x2vSocketInterfaceAsync as x2vSocketInterface
-    elif interface == 'periodic_sendDelay':
-        print("Using periodic send with delay injection interface")
-        from x2vSocketInterface_periodic_sendDelay import x2vSocketInterfaceAsync as x2vSocketInterface
+        from x2vSocketInterface_Udp_periodic import x2vSocketInterfaceAsync as x2vSocketInterface
     else:
         raise ValueError("Invalid interface type. Choose 'periodicInterface', 'latency', or 'naiveAsync'.")
 else:
@@ -199,15 +190,6 @@ if __name__=="__main__":
       
         # Send NV states to realCAV
         if interface == 'periodicInterface':
-            with sockInt.simData_lock:
-                sockInt.latest_sim_data = sim_nv_array
-        elif interface == 'hybrid':
-            sockInt.queue_sim_info(sim_nv_array)
-        elif interface == 'latency':
-            sockInt.send_sim_info(sim_nv_array)     
-        elif interface == 'naiveAsync':
-            sockInt.send_sim_info(sim_nv_array)
-        elif interface == 'periodic_sendDelay':
             with sockInt.simData_lock:
                 sockInt.latest_sim_data = sim_nv_array
         else:

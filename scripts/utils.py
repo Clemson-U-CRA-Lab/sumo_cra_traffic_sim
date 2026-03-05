@@ -253,7 +253,7 @@ def traffic_online_MPC_control_step_nVeh(nVehicleStatesMatrix,
         if verbose:
             print(f"{bcolors.HEADER_MAGENTA}SIM TIME: {sim_t:.2f}{bcolors.ENDC}")
             for veh in nVehicleStatesMatrix:
-                print(f"{bcolors.HEADER_MAGENTA}{veh[0]} S: {veh[3]:.2f}, V: {veh[2]:.2f}{bcolors.ENDC}")
+                print(f"{bcolors.HEADER_MAGENTA}{veh[0]} S: {veh[3]:.2f}, V: {veh[2]:.2f}, a: {veh[1]:.2f}{bcolors.ENDC}")
             if i == 1:
                 # print(f"{bcolors.HEADER_MAGENTA}ego S: {ego_dist:.2f}, V: {ego_spd:.2f}{bcolors.ENDC}")
                 # print(f"{bcolors.HEADER_MAGENTA}Lead S: {pv_dist:.2f}, V: {pv_spd:.2f}{bcolors.ENDC}")

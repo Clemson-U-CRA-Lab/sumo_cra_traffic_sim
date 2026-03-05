@@ -10,6 +10,8 @@ from _controller import *
 from _constants import *
 import time
 
+from collections import deque
+
 # import classes
 from SumoSim import SumoSim
 from x2v_constants import *
@@ -25,6 +27,15 @@ data = np.zeros([int(END_TIME/SIM_STEP)+1,len(csv_header)])
 vizTraj = False
 guiSumo = True
 live_plt = False
+
+# =========================
+# DoS-as-latency on lead info (nv0 -> nv1)
+# =========================
+BOOL_ATTACK_LEAD_INFO = False
+ATTACK_START_TIME = STALLTIME    # start delaying BEFORE stall so ego misses it
+LEAD_INFO_DELAY = 3            # seconds of stale lead info (try 0.5 to 1.5)
+lead_state_buffer = deque()   
+
 
 
 if __name__=="__main__":
@@ -136,13 +147,23 @@ if __name__=="__main__":
         # Assign speeds to leading vehicle
         v_lead_id = np.argmin(np.abs([record_t - sim_time]))
         v_tgt_lead = front_v_t[v_lead_id]
+
         if sim_time < STALLTIME:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=v_tgt_lead)
         else:
-            sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=0)
+            traci.vehicle.setSpeedMode("nv1", 96) 
+            traci.vehicle.setSpeedMode("nv0", 96) # no safety, no auto
+            # sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=0)
+            traci.vehicle.setSpeed("nv0", 0.0)          # immediate stop (aggressive)
+            traci.vehicle.setAcceleration("nv0", -8.0, 1.0)
 
         # Get vehicle states
         veh_states_matrix = [sumo_sim_manager.getVehicleStates(veh, returnStatesNum=5) for veh in vehicle_list]
+        
+        if sim_time > STALLTIME:
+            veh_states_matrix[1][2] = 5.0
+            veh_states_matrix[1][1] = 1.0
+
 
         # SOLVE CONOTROL
         # Run MPC control if enabled

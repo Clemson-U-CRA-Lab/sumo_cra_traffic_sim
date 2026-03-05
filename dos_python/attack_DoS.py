@@ -10,9 +10,14 @@ import time
 import threading
 import random
 import struct
+import os, sys
 
-TARGET_IP = 'fe80::6e5:48ff:fe30:0820'  # RSU IP address (modify as necessary)
-TARGET_PORT = 7002           # Replace with the target port
+sys.path.append(os.path.abspath("/home/cra/sumo_ws/sumo_cra_traffic_sim/scripts"))
+from x2v_constants import *
+
+
+TARGET_IP = SERVER_IP  # RSU IP address (modify as necessary)
+TARGET_PORT = SERVER_PORT           # Replace with the target port
 
 # TARGET_IP = 'localhost'
 # TARGET_PORT = 7005

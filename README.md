@@ -18,6 +18,10 @@ Scripts:
     sumoOnly_v3_3veh - has no tcp, purely sumo, no0,nv1,nv2
     sumoOnly_v3_nVeh - take snumber of cvehicles from sumo vehicle list, basedd on .cfg file `SUMO_CONFIG`
 
+5. sumo2V_v4_nv1.py - 
+
+6. sumo2V_v5_nv1.py - with UDP
+
 
 TODO:
 1. Pred, preview with new (eraleir it wasnt updating speed mode) chcks off.
@@ -41,16 +45,10 @@ TODO:
     - 
 
     - Try UDP
-    - Try 
+    - Try cv2x
 
 
-26: run intention sharing + dos repatable
-27: run intention sharing + dos repatable - sythinthetic it.
-27 - run on vehicle
-28 - run on veihcle, decide plots of paper
-29 - decide plots of paper. run all experiments
-30 - run all experiments.
-31 Aug - All plots ready
-1 - 3 - first draft of paper.
-4-5 - Refine lit review ans send to profs.
 
+# How to Run:
+
+1. 

@@ -33,7 +33,6 @@ vizTraj = False
 testWithoutGPS = BOOL_TEST_WITHOUT_GPS
 verbosity = False
 
-
 if asyncSocket:
     if interface == 'periodicInterface':
         from x2vSocketInterface_periodic import x2vSocketInterfaceAsync as x2vSocketInterface
@@ -88,7 +87,7 @@ if __name__=="__main__":
 
     if guiSumo:
         traci.gui.trackVehicle("View #0", "nv1")
-        traci.gui.setZoom("View #0", 500)
+        traci.gui.setZoom("View #0", 600)
     
     # Inti and Setup controller
     if USING_ONLINE_MPC:
@@ -132,14 +131,21 @@ if __name__=="__main__":
         # Assign speeds to leading vehicle
         v_lead_id = np.argmin(np.abs([record_t - sim_time]))
         v_tgt_lead = front_v_t[v_lead_id]
-        if sim_time < STALLTIME:
-            sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=v_tgt_lead)
-        else:
+
+        if STALLTIME  < sim_time < (STALLENDTIME):
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=0)
+        else:
+            sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=v_tgt_lead)
 
         # Get vehicle states
         veh_states_matrix = [sumo_sim_manager.getVehicleStates(veh, returnStatesNum=5) for veh in vehicle_list]
 
+        if STALLTIME  < sim_time < (STALLENDTIME) and DEMO_COLLISION:
+            v_hold = 5.0 # front vehicle's speed at stall time
+            veh_states_matrix[0][2] = v_hold
+            veh_states_matrix[0][3] = veh_states_matrix[0][3] + v_hold*SIM_STEP 
+            veh_states_matrix[0][1] = 0.9 # update front vehicle's acc to 0, and update its s according to hold speed. This is to simulate the front vehicle stalled but not disappearing, which is common in real life.
+        
         # SOLVE CONOTROL
         # Run MPC control if enabled
         start_t = time.time()
@@ -156,7 +162,7 @@ if __name__=="__main__":
                                                        cycle_stages= REF_CYCLE_STAGES,
                                                        PassIntention=BOOL_USE_FRONT_PREVIEW,
                                                        outputUsedCycleforFront=True,
-                                                       verbose=False
+                                                       verbose=True
                                                        )
         else:
             acc = {}
@@ -176,7 +182,7 @@ if __name__=="__main__":
             sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(0, 255, 2, 100), fill=False, layer=4)
            
         # Assign the acceleration to leader nv0
-        if sim_time >= STALLTIME:
+        if STALLTIME < sim_time < (STALLENDTIME):
             # Stalling it
             sim_nv_array = [sim_time, 
                             veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
