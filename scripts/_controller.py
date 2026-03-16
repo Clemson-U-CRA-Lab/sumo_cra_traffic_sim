@@ -12,10 +12,6 @@ import numpy as np
 from utils import *
 from _sensor import *
 from _agents import *
-
-def TTCi_estimate(ego_v, front_v, front_s):
-    ttc_i = (ego_v - front_v) / front_s
-    return ttc_i
 class IDM():
     def __init__(self, a, b, s0, v0, T):
         self.a = a
@@ -81,7 +77,6 @@ class NN_controller():
         return a_ego_max
     
     def step_forward(self, s_vt, pv_vt, s_st, pv_st, s_at, pv_at, use_prediction_horizon, sim_t):
-        ttc_i = TTCi_estimate(ego_v=s_vt, front_v=pv_vt, front_s=pv_st - s_st)
         # Calculate the prediction horizon length
         pv_s_end = np.zeros(pv_st.shape)
         pv_v_end = np.zeros(pv_vt.shape)
@@ -92,16 +87,9 @@ class NN_controller():
         s = pv_st + np.cumsum(v * 0.5, axis=0)
         pv_s_end = np.clip(s[-1, :] - s_st, -10, 1500)
         pv_v_end = v[-1, :] - s_vt
-        sig_dv = 25
-        sig_ds = 300
-        c_dv = 55.13
-        c_ds = 910
         
         if self.num_input == 3:
             if use_prediction_horizon:
-                # nn_input_vec = np.array([s_vt, 
-                #                          np.exp(-(pv_v_end - c_dv) / (2 * sig_dv)), 
-                #                          np.exp(-(pv_s_end - c_ds) / (2 * sig_ds))])
                 nn_input_vec = np.array([s_vt, pv_v_end, pv_s_end])
             else:
                 nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st])
@@ -111,14 +99,17 @@ class NN_controller():
         # Compute the neural network control
         with torch.no_grad():
             ego_a_nn = self.nn_controller.forward(nn_input)
-            s_a_nn = ego_a_nn.flatten().tolist()
+            s_a_nn = (ego_a_nn.flatten()).tolist()
         
         # Check if CBF safety constraint is violated
-        a_ego_max = self.CBF_acceleration_bound_check(pv_vt=pv_vt, s_vt=s_vt, pv_st=pv_st, s_st=s_st, tao=2.0, alpha=1.0, L=7.5)
-        ego_a_tgt = np.minimum(s_a_nn, a_ego_max)
-        
+        a_ego_max = self.CBF_acceleration_bound_check(pv_vt=pv_vt, s_vt=s_vt, pv_st=pv_st, s_st=s_st, tao=1.5, alpha=2.0, L=7.0)
+        if np.any(s_a_nn > a_ego_max):
+            print(f"CBF safety constraint is violated at time {sim_t}! Adjusting NN control to ensure safety...")
+            ego_a_tgt = np.minimum(s_a_nn, a_ego_max)
+        else:
+            ego_a_tgt = s_a_nn
+
         return ego_a_tgt
-    
 class lookup_table_controller():
     def __init__(self, table_filename, max_s1, max_s2, max_dv, num_s1, num_s2, num_dv):
         self.s1_range = np.linspace(-1.0, max_s1, num_s1)

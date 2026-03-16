@@ -34,7 +34,7 @@ class sumo_sim():
             self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 30 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0, sumo_brake=False)
 
     def start_Sumo(self):
-        sumoCmd = [self.sumoBinary, "-c", self.sumoconfig, "--quit-on-end"]
+        sumoCmd = [self.sumoBinary, "-c", self.sumoconfig, "--quit-on-end", "--collision.action", "none"]
         traci.start(sumoCmd)
     
     def simulationStepForward(self):
@@ -48,7 +48,7 @@ if __name__=="__main__":
     parser.add_argument("--logging_sim", help="whether to save the simulation data", action="store_true")
     parser.add_argument("--plot_result", help="whether to plot result after sim stop", default=False, action="store_true")
     parser.add_argument("--num_sv", type=int, default=5.0, help="Number of vehicles in the traffic")
-    parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy', 'US06','FTPsec1','FTPsec2','FTPsec3'], help='Choose leading vehicles speed profile')
+    parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy', 'Ftp', 'US06','FTPsec1','FTPsec2','FTPsec3'], help='Choose leading vehicles speed profile')
     parser.add_argument("control_type", choices=['MPC', 'NN', 'IDM'], help='Choose control method for traffic vehicles')
     args = parser.parse_args()
     
@@ -80,6 +80,8 @@ if __name__=="__main__":
         spd_filename = parent_dir + "/speed_profile/I85_hwycol.csv"
     elif args.leading_speed_profile == 'Nyc':
         spd_filename = parent_dir + "/speed_profile/I85_nycccol.csv"
+    elif args.leading_speed_profile == 'Ftp':
+        spd_filename = parent_dir + "/speed_profile/I85_ftp.csv"
     elif args.leading_speed_profile == 'US06':
         spd_filename = parent_dir + "/speed_profile/US06_CMI_Urban_speed_profile.csv"
     elif args.leading_speed_profile == 'FTPsec1':
@@ -93,7 +95,7 @@ if __name__=="__main__":
         sys.exit(1)
     leading_vehicle_speed_profile = driving_cycle_spd_profile_reader(spd_filename)
     
-    if args.leading_speed_profile == 'Hwy' or args.leading_speed_profile == 'Nyc':
+    if args.leading_speed_profile == 'Hwy' or args.leading_speed_profile == 'Nyc' or args.leading_speed_profile == 'Ftp':
         sumo_sim_manager = sumo_sim(sumo_config_name=parent_dir + "/sumo/I-85_highway/I-85.sumocfg")
         sumo_sim_manager.start_Sumo()
         sumo_sim_manager.init_vehicles_large_map(num_vehicle=num_veh)
@@ -116,7 +118,7 @@ if __name__=="__main__":
         controller_name = 'Online_MPC'
         print('Use online MPC to control traffic vehicles')
     elif USING_IDM:
-        IDM_control = IDM(a=2, b=2, s0=5, v0=20, T=2)
+        IDM_control = IDM(a=2, b=3, s0=7, v0=20, T=1.5)
         controller_name = 'Intelligent_Driving_Model'
         print('Use IDM to control traffic vehicles')
     else:
@@ -205,7 +207,7 @@ if __name__=="__main__":
             # Assign the acceleration to ego vehicle
             sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc, v_max=30)
         runtime_dt =  time.time() - t_start
-        print('MPC runtime is: ', str(round(runtime_dt * 1000, 4)), 'ms', end='\r')
+        print('MPC runtime is: ', str(round(runtime_dt * 1000, 3)), 'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
         
         if USING_NEURAL_NETWORK:
             t_start = time.time()
@@ -214,7 +216,7 @@ if __name__=="__main__":
                                                           s_at=np.array(s_at_traffic), pv_at=np.array(pv_at_traffic),
                                                           use_prediction_horizon=True, sim_t=sim_t)
             runtime_dt =  time.time() - t_start
-            print('NN runtime is: ', str(round(runtime_dt * 1000, 4)), 'ms', end='\r')
+            print('NN runtime is: ', str(round(runtime_dt * 1000, 3)), 'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
             sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0], v_max=30)
             for i in range(1, num_veh):
                 sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1], v_max=30)

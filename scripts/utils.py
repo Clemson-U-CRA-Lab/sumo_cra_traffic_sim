@@ -255,15 +255,16 @@ def driving_cycle_state_preview_searching(sim_t, record_t, front_v_t, mpc_dt, fr
     cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=mpc_dt) + front_s_init
     
     return cycle_vs, cycle_ss
-    
+
+def CBF_acceleration_bound_check(pv_vt, s_vt, pv_st, s_st, tao, alpha, L):
+    a_ego_max = (pv_vt - s_vt + alpha * (pv_st - s_st - L - tao * s_vt)) / tao
+    return a_ego_max    
 
 def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
                                     veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
                                     sim_t, online_MPC_control, record_t, 
                                     front_v_t, mpc_dt, pv_object, ego_object, 
                                     leading_preview=False):
-    
-    IDM_brake = IDM(a=3, b=5, s0=8, v0=30, T=5)
     
     if leading_preview:
         cycle_vs, cycle_ss = driving_cycle_state_preview_searching(sim_t=sim_t, record_t=record_t, front_v_t=front_v_t, mpc_dt=mpc_dt, front_s_init=veh_0_dist_t)
@@ -276,13 +277,11 @@ def traffic_online_MPC_control_step(veh_0_acc_t, veh_0_spd_t, veh_0_dist_t,
     if leading_preview:
         ego_object.update_vehicle_future_states_preview(np.array(veh_1_pred_s) - 5.0, veh_1_pred_v)
     
-    # Compute intelligent driver model control
-    # ttc_i = TTCi_estimate(ego_v=veh_1_spd_t, front_v=veh_0_spd_t, front_s=veh_0_dist_t - veh_1_dist_t)
-    # s_a_IDM = IDM_brake.IDM_acceleration(front_v=veh_0_spd_t, ego_v=veh_1_spd_t, front_s=veh_0_dist_t, ego_s=veh_1_dist_t)
-    # 
-    # det = ((ttc_i > 0.15) + (veh_0_dist_t - veh_1_dist_t < 15)).astype(bool)
-    # IDM_w = det.astype(float)
-    # ego_a_tgt = IDM_w * s_a_IDM + (1.0 - IDM_w) * a_MPC
+    # Check if CBF safety constraint is violated
+    a_ego_max = CBF_acceleration_bound_check(pv_vt=veh_0_spd_t, s_vt=veh_1_spd_t, pv_st=veh_0_dist_t, s_st=veh_1_dist_t, tao=1.8, alpha=2.0, L=7.0)
+    if a_MPC > a_ego_max:
+        print(f"CBF safety constraint is violated at time {sim_t}! Adjusting MPC control to ensure safety...")
+        a_MPC = np.minimum(a_MPC, a_ego_max)
     
     return [a_MPC]
 
