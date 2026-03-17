@@ -108,7 +108,7 @@ if __name__=="__main__":
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
-    nn_pt_filename = dirname + '/traffic_following_control_dc_trained.pt'
+    nn_pt_filename = dirname + '/traffic_following_control.pt'
     
     # Setup controller
     if USING_NEURAL_NETWORK:
@@ -216,7 +216,7 @@ if __name__=="__main__":
             acc_traffic_step_t = FCN_control.step_forward(s_vt=np.array(s_vt_traffic), pv_vt=np.array(pv_vt_traffic),
                                                           s_st=np.array(s_st_traffic), pv_st=np.array(pv_st_traffic),
                                                           s_at=np.array(s_at_traffic), pv_at=np.array(pv_at_traffic),
-                                                          use_prediction_horizon=True, sim_t=sim_t)
+                                                          use_prediction_horizon=True, sim_t=sim_t, lambda_smooth=8.0)
             runtime_dt =  time.time() - t_start
             print('NN runtime is: ', str(round(runtime_dt * 1000, 3)), 'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
             sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0], v_max=30)
