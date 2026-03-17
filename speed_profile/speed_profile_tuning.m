@@ -19,7 +19,7 @@ xlabel('Time [s]');ylabel('Speed [m/s]')
 %%  Decrease time interval
 dt = 0.1;
 t = t_raw(1) : dt : t_raw(end);
-spd = interp1(t_raw, spd_raw, t, "makima");
+spd = interp1(t_raw, spd_raw, t, "makima") / 1.25;
 
 % Estimate the acceleration and distance travelled
 acc = [diff(spd) / dt, 0];

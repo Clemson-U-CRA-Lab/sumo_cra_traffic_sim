@@ -11,6 +11,7 @@ from _controller import *
 from _constants import *
 import time
 import random
+
 class sumo_sim():
     def __init__(self, sumo_config_name):
         self.sumoBinary = "/usr/bin/sumo-gui"
@@ -76,6 +77,7 @@ if __name__=="__main__":
     
     current_dirname = os.path.dirname(__file__)
     parent_dir = os.path.abspath(os.path.join(current_dirname, os.pardir))
+    
     if args.leading_speed_profile == 'Hwy':
         spd_filename = parent_dir + "/speed_profile/I85_hwycol.csv"
     elif args.leading_speed_profile == 'Nyc':
@@ -260,7 +262,7 @@ if __name__=="__main__":
             data_logger(sim_t=sim_t, ego_a=veh_1_acc_t, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
                         pv_a=veh_0_acc_t, pv_v=veh_0_spd_t, pv_s=veh_0_dist_t, filename= args.leading_speed_profile + "_" + controller_name + ".csv")
         
-        time.sleep(0.01)
+        time.sleep(0.001)
     
     traci.close(True)
     

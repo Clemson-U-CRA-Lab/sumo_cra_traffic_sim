@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils import spectral_norm
 from scipy.interpolate import RegularGridInterpolator
 
 import math
@@ -48,7 +49,7 @@ class Model(nn.Module):
         x = self.out(x)
         return x
 
-class Model_3_input(nn.Module):
+class Model_4_input(nn.Module):
     def __init__(self, in_features=4, h1=256, h2=256, h3=32, out_features=1):
         super().__init__()
         self.fc1 = nn.Linear(in_features, h1)
@@ -67,7 +68,7 @@ class NN_controller():
         if input_num == 3:
             self.nn_controller = Model(h1=256, h2=256)
         if input_num == 4:
-            self.nn_controller = Model_3_input(h1=256, h2=256)
+            self.nn_controller = Model_4_input(h1=256, h2=256)
         self.nn_controller.eval()
         self.nn_controller.load_state_dict(torch.load(nn_pt_file, map_location='cpu'))
         self.nn_controller.to('cuda')
@@ -85,7 +86,7 @@ class NN_controller():
         v = pv_vt + np.cumsum(a * 0.5, axis=0)
         v = np.clip(v, 0, np.Inf)
         s = pv_st + np.cumsum(v * 0.5, axis=0)
-        pv_s_end = np.clip(s[-1, :] - s_st, -10, 1500)
+        pv_s_end = np.clip(s[-1, :] - s_st, -10, 2000)
         pv_v_end = v[-1, :] - s_vt
         
         if self.num_input == 3:
@@ -94,7 +95,7 @@ class NN_controller():
             else:
                 nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_st - s_st])
         if self.num_input == 4:
-            nn_input_vec = np.array([s_vt, pv_vt - s_vt, pv_s_end, pv_v_end])
+            nn_input_vec = np.array([s_vt, pv_v_end, pv_s_end, s_at])
         nn_input = torch.FloatTensor(nn_input_vec.T).cuda()
         # Compute the neural network control
         with torch.no_grad():
