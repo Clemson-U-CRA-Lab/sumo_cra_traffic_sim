@@ -47,8 +47,3 @@ TODO:
     - Try UDP
     - Try cv2x
 
-
-
-# How to Run:
-
-1. 

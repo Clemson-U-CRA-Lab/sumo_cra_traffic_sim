@@ -25,7 +25,7 @@ class x2vSocketInterfaceAsync:
     '''
     def __init__(
             self, 
-            ip=RSU_IPV4, 
+            ip=TARGET_IP, 
             tx_port=TX_UDP_PORT, 
             rx_port=RX_UDP_PORT, 
             timeout=TIMEOUT, 
@@ -40,7 +40,7 @@ class x2vSocketInterfaceAsync:
         self.recvd_msg_bytes = recv_bytes
         self.send_socket, self.recv_socket = self.setup_udp_sockets()
 
-        self.verbose = False
+        self.verbose = True
         
         # Store the latest received data
         self.latest_veh_data = None
@@ -79,7 +79,7 @@ class x2vSocketInterfaceAsync:
         self.send_socket.sendto(message, self.server_address)
         if self.verbose:
             print(f"------>RSPC sent to RSU->OBU: SimTime {sim_array[0]:.2f}")
-        # print("-----> RSPC Sent to RSU->OBU: ", len(message), time.time())
+            # print("-----> RSPC Sent to RSU->OBU: ", len(message), time.time())
 
     def _recv_loop1(self):
         """ Continuously receives data and updates the latest vehicle state. """
@@ -95,7 +95,6 @@ class x2vSocketInterfaceAsync:
                 veh_array = struct.unpack(f'<{VEH_ARRAY_SIZE}f', frame[:frame_len])
                 with self.data_lock:
                     self.latest_veh_data = veh_array
-                    # self.vehData_queue.append(veh_array)
                 if self.verbose:
                     print(f"<------RSPC recvd from RSU<-OBU: SimTime {veh_array[0]:.2f}")
 
@@ -106,11 +105,6 @@ class x2vSocketInterfaceAsync:
         """ Returns the latest received vehicle data without waiting. """
         with self.data_lock:
             return self.latest_veh_data  # Return last received data immediately
-
-            # if self.vehData_queue:
-            #     return self.vehData_queue.pop(0)   # FIFO
-            # else:
-            #     return None
 
     def _send_loop(self):
         next_deadline = time.monotonic()
