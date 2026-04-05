@@ -12,6 +12,40 @@ from _constants import *
 import time
 import random
 
+
+PREVIEW_STEPS = 20
+PREVIEW_DT = 0.5
+PREVIEW_TRAJECTORY_GAP_FEATURES = 19
+
+
+def preview_trajectory_to_vehicle_preview(
+    preceding_preview_s,
+    preceding_preview_v,
+    trajectory_prediction,
+    current_distance_headway,
+    current_speed_gap,
+):
+    trajectory_prediction = np.asarray(trajectory_prediction, dtype=float).reshape(-1)
+    if trajectory_prediction.size != PREVIEW_TRAJECTORY_GAP_FEATURES * 2:
+        raise ValueError(
+            "Unexpected preview trajectory output size: expected "
+            + str(PREVIEW_TRAJECTORY_GAP_FEATURES * 2)
+            + ", got "
+            + str(trajectory_prediction.size)
+        )
+
+    predicted_distance_headway = np.concatenate(
+        ([current_distance_headway], trajectory_prediction[:PREVIEW_TRAJECTORY_GAP_FEATURES])
+    )
+    predicted_speed_gap = np.concatenate(
+        ([current_speed_gap], trajectory_prediction[PREVIEW_TRAJECTORY_GAP_FEATURES:])
+    )
+
+    ego_preview_s = preceding_preview_s - predicted_distance_headway
+    ego_preview_v = preceding_preview_v - predicted_speed_gap
+    return ego_preview_s, ego_preview_v
+
+
 class sumo_sim():
     def __init__(self, sumo_config_name):
         self.sumoBinary = "/usr/bin/sumo-gui"
@@ -50,21 +84,29 @@ if __name__=="__main__":
     parser.add_argument("--plot_result", help="whether to plot result after sim stop", default=False, action="store_true")
     parser.add_argument("--num_sv", type=int, default=5.0, help="Number of vehicles in the traffic")
     parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy', 'Ftp', 'US06','FTPsec1','FTPsec2','FTPsec3'], help='Choose leading vehicles speed profile')
-    parser.add_argument("control_type", choices=['MPC', 'NN', 'IDM'], help='Choose control method for traffic vehicles')
+    parser.add_argument("control_type", choices=['MPC', 'NN', 'PreviewNN', 'IDM'], help='Choose control method for traffic vehicles')
     args = parser.parse_args()
     
     # Traffic control setting
     if args.control_type == 'MPC':
         USING_ONLINE_MPC = 1 # If using online MPC to track front vehicle
         USING_NEURAL_NETWORK = 0 # If using neural network controller to track front vehicle
+        USING_PREVIEW_NEURAL_NETWORK = 0
         USING_IDM = 0 # If using IDM to traffic front vehicle
     elif args.control_type == 'NN':
         USING_ONLINE_MPC = 0 # If using online MPC to track front vehicle
         USING_NEURAL_NETWORK = 1 # If using neural network controller to track front vehicle
+        USING_PREVIEW_NEURAL_NETWORK = 0
+        USING_IDM = 0 # If using IDM to traffic front vehicle
+    elif args.control_type == 'PreviewNN':
+        USING_ONLINE_MPC = 0 # If using online MPC to track front vehicle
+        USING_NEURAL_NETWORK = 0 # If using neural network controller to track front vehicle
+        USING_PREVIEW_NEURAL_NETWORK = 1
         USING_IDM = 0 # If using IDM to traffic front vehicle
     else:
         USING_ONLINE_MPC = 0 # If using online MPC to track front vehicle
         USING_NEURAL_NETWORK = 0 # If using neural network controller to track front vehicle
+        USING_PREVIEW_NEURAL_NETWORK = 0
         USING_IDM = 1 # If using IDM to traffic front vehicle
         
     num_veh = args.num_sv
@@ -109,12 +151,32 @@ if __name__=="__main__":
     # Initialize controller
     dirname = os.path.dirname(__file__)
     nn_pt_filename = dirname + '/traffic_following_control.pt'
+    preview_nn_pt_filename = os.path.abspath(
+        os.path.join(
+            parent_dir,
+            os.pardir,
+            "offline_eco_car_following_control",
+            "Preview_car_following_experiment",
+            "preview_traffic_following_control_conv_best.pt",
+        )
+    )
     
     # Setup controller
     if USING_NEURAL_NETWORK:
         FCN_control = NN_controller(nn_pt_file=nn_pt_filename, input_num=3)
         controller_name = 'Neural_Network'
         print('Use neural network to control traffic vehicles')
+    elif USING_PREVIEW_NEURAL_NETWORK:
+        if not os.path.exists(preview_nn_pt_filename):
+            raise FileNotFoundError(
+                "Missing preview NN checkpoint: " + preview_nn_pt_filename
+            )
+        Preview_control = PreviewNN_controller(
+            nn_pt_file=preview_nn_pt_filename,
+            preview_steps=PREVIEW_STEPS,
+        )
+        controller_name = 'Preview_Neural_Network'
+        print('Use preview neural network to control traffic vehicles')
     elif USING_ONLINE_MPC:
         online_MPC_control = PCC_MPC_controller(dirname=dirname)
         controller_name = 'Online_MPC'
@@ -157,6 +219,8 @@ if __name__=="__main__":
         
         s_at_traffic = []
         pv_at_traffic = []
+        preview_distance_headway_traffic = []
+        preview_speed_gap_traffic = []
         start_t = time.time()
         t_start = time.time()
         
@@ -170,9 +234,21 @@ if __name__=="__main__":
                 [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t] = sumo_sim_manager.sumo_veh[i].getVehicleStates()
                 lead_s = veh_1_dist_t
                 # Update state preview
-                lead_prev_v, lead_prev_s = driving_cycle_state_preview_searching(sim_t=sim_t, record_t=record_t, front_v_t=front_v_t, mpc_dt=0.1, front_s_init=lead_s)
+                lead_prev_v, lead_prev_s = driving_cycle_state_preview_searching(
+                    sim_t=sim_t,
+                    record_t=record_t,
+                    front_v_t=front_v_t,
+                    mpc_dt=PREVIEW_DT,
+                    front_s_init=lead_s,
+                )
                 # Load future state preview
-                sumo_sim_manager.sumo_veh[i].update_vehicle_future_states_preview(lead_prev_s, lead_prev_v)
+                sumo_sim_manager.sumo_veh[i].update_vehicle_future_states_preview(
+                    lead_prev_s[:PREVIEW_STEPS],
+                    lead_prev_v[:PREVIEW_STEPS],
+                    sim_step=sumo_sim_manager.step,
+                    preview_dt=PREVIEW_DT,
+                    source="driving_cycle",
+                )
                 continue
             
             [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t] = sumo_sim_manager.sumo_veh[i-1].getVehicleStates()
@@ -200,6 +276,44 @@ if __name__=="__main__":
                 pv_st_traffic.append(veh_0_dist_t)
                 s_at_traffic.append(veh_1_acc_t)
                 pv_at_traffic.append(veh_0_acc_t)
+                continue
+            elif USING_PREVIEW_NEURAL_NETWORK:
+                distance_headway_preview, speed_gap_preview = (
+                    sumo_sim_manager.sumo_veh[i].build_preview_features_from_preceding_vehicle(
+                        preceding_vehicle=sumo_sim_manager.sumo_veh[i-1],
+                        preview_steps=PREVIEW_STEPS,
+                        preview_dt=PREVIEW_DT,
+                        sim_step=sumo_sim_manager.step,
+                        use_current_ego_state=True,
+                    )
+                )
+                preview_distance_headway_traffic.append(distance_headway_preview)
+                preview_speed_gap_traffic.append(speed_gap_preview)
+
+                current_distance_headway = veh_0_dist_t - veh_1_dist_t
+                current_speed_gap = veh_0_spd_t - veh_1_spd_t
+                acc_prediction, trajectory_prediction = Preview_control.step_forward(
+                    ego_vt=np.array([veh_1_spd_t]),
+                    distance_headway_preview=np.array([distance_headway_preview]),
+                    speed_gap_preview=np.array([speed_gap_preview]),
+                    return_trajectory=True,
+                )
+                acc = acc_prediction[0]
+                ego_preview_s, ego_preview_v = preview_trajectory_to_vehicle_preview(
+                    preceding_preview_s=sumo_sim_manager.sumo_veh[i-1].preview_s,
+                    preceding_preview_v=sumo_sim_manager.sumo_veh[i-1].preview_v,
+                    trajectory_prediction=trajectory_prediction[0],
+                    current_distance_headway=current_distance_headway,
+                    current_speed_gap=current_speed_gap,
+                )
+                sumo_sim_manager.sumo_veh[i].update_vehicle_future_states_preview(
+                    ego_preview_s,
+                    ego_preview_v,
+                    sim_step=sumo_sim_manager.step,
+                    preview_dt=PREVIEW_DT,
+                    source="preview_nn",
+                )
+                sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc, v_max=30)
                 continue
             else:
                 acc_traffic_step_t = np.zeros(3)
@@ -239,6 +353,9 @@ if __name__=="__main__":
             sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0][0], v_max=30)
             for i in range(1, num_veh):
                 sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[0][i-1], v_max=30)
+        if USING_PREVIEW_NEURAL_NETWORK:
+            runtime_dt =  time.time() - t_start
+            print('Preview NN runtime is: ', str(round(runtime_dt * 1000, 3)), 'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
         # Add power consumption
         Power_t.append(P_t)
         ego_state_t = sumo_sim_manager.sumo_veh[1].getVehicleStates()

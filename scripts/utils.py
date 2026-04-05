@@ -74,14 +74,17 @@ class SUMO_vehicles():
         self.lane_ID = init_lane
         self.pTL_s = None
         self.pTL_id = None
+        self.preview_s = None
+        self.preview_v = None
+        self.preview_a = None
+        self.preview_dt = None
+        self.preview_sim_step = None
+        self.preview_source = None
+        self.preview_num_steps = 0
         self.pv_s_prev = None
         self.pv_v_prev = None
 
         traci.vehicle.add(self.ID, route_ID, typeID = 'electricCar', departLane=str(self.lane_ID), departPos=self.s, departSpeed=0)
-        # if self.s > 200:
-        #     traci.vehicle.moveToXY(self.ID, edgeID="E2_0", laneIndex=0, x=self.s - 200,y=0)
-        # elif self.s > 1000:
-        #     traci.vehicle.moveToXY(self.ID, edgeID="E3_0", laneIndex=0, x=self.s - 1000,y=0)
         traci.vehicle.setParameter(objectID=self.ID, key='vClass', value='evehicle')
         traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=lane_change_mode)
         if not sumo_brake:
@@ -128,9 +131,167 @@ class SUMO_vehicles():
     def assignLaneChangeMode(self, mode):
         traci.vehicle.setLaneChangeMode(vehID=self.ID, laneChangeMode=mode)
     
-    def update_vehicle_future_states_preview(self, pv_s, pv_v):
-        self.pv_s_prev = pv_s
-        self.pv_v_prev = pv_v
+    def _normalize_preview_array(self, preview_values, name):
+        if preview_values is None:
+            return None
+
+        preview_array = np.asarray(preview_values, dtype=float).reshape(-1)
+        if preview_array.size == 0:
+            raise ValueError(name + " cannot be empty.")
+        return preview_array
+
+    def update_vehicle_future_states_preview(
+        self,
+        pv_s,
+        pv_v,
+        pv_a=None,
+        sim_step=None,
+        preview_dt=None,
+        source=None,
+    ):
+        preview_s = self._normalize_preview_array(pv_s, "Preview position array")
+        preview_v = self._normalize_preview_array(pv_v, "Preview speed array")
+
+        if preview_s.shape != preview_v.shape:
+            raise ValueError("Preview position and speed arrays must have the same shape.")
+
+        if pv_a is not None:
+            preview_a = self._normalize_preview_array(pv_a, "Preview acceleration array")
+            if preview_a.shape != preview_s.shape:
+                raise ValueError(
+                    "Preview acceleration array must match the preview position and speed arrays."
+                )
+        else:
+            preview_a = None
+
+        self.preview_s = preview_s.copy()
+        self.preview_v = preview_v.copy()
+        self.preview_a = None if preview_a is None else preview_a.copy()
+        self.preview_dt = preview_dt
+        self.preview_sim_step = sim_step
+        self.preview_source = source
+        self.preview_num_steps = preview_s.size
+        self.pv_s_prev = self.preview_s
+        self.pv_v_prev = self.preview_v
+
+    def clear_vehicle_future_states_preview(self):
+        self.preview_s = None
+        self.preview_v = None
+        self.preview_a = None
+        self.preview_dt = None
+        self.preview_sim_step = None
+        self.preview_source = None
+        self.preview_num_steps = 0
+        self.pv_s_prev = None
+        self.pv_v_prev = None
+
+    def has_valid_future_states_preview(self, expected_steps=None, sim_step=None):
+        if self.preview_s is None or self.preview_v is None:
+            return False
+        if expected_steps is not None and self.preview_num_steps != expected_steps:
+            return False
+        if sim_step is not None and self.preview_sim_step is not None:
+            return self.preview_sim_step == sim_step
+        return True
+
+    def get_vehicle_future_states_preview(self, expected_steps=None, sim_step=None):
+        if not self.has_valid_future_states_preview(
+            expected_steps=expected_steps,
+            sim_step=sim_step,
+        ):
+            return None, None
+        return self.preview_s.copy(), self.preview_v.copy()
+
+    def predict_constant_acceleration_preview(self, preview_steps, preview_dt, clip_min_speed=0.0):
+        [veh_a_t, veh_v_t, veh_s_t] = self.getVehicleStates()
+
+        if preview_steps <= 0:
+            raise ValueError("Preview step count must be positive.")
+        if preview_dt <= 0:
+            raise ValueError("Preview timestep must be positive.")
+
+        preview_a = np.full(preview_steps, veh_a_t, dtype=float)
+        preview_v = np.empty(preview_steps, dtype=float)
+        preview_s = np.empty(preview_steps, dtype=float)
+
+        predicted_v = veh_v_t
+        predicted_s = veh_s_t
+        for preview_id in range(preview_steps):
+            predicted_v = max(predicted_v + veh_a_t * preview_dt, clip_min_speed)
+            predicted_s = predicted_s + predicted_v * preview_dt
+            preview_v[preview_id] = predicted_v
+            preview_s[preview_id] = predicted_s
+
+        return preview_s, preview_v, preview_a
+
+    def ensure_vehicle_future_states_preview(
+        self,
+        preview_steps,
+        preview_dt,
+        sim_step=None,
+        source="constant_acceleration",
+    ):
+        if self.has_valid_future_states_preview(
+            expected_steps=preview_steps,
+            sim_step=sim_step,
+        ):
+            return self.preview_s.copy(), self.preview_v.copy()
+
+        preview_s, preview_v, preview_a = self.predict_constant_acceleration_preview(
+            preview_steps=preview_steps,
+            preview_dt=preview_dt,
+        )
+        self.update_vehicle_future_states_preview(
+            preview_s,
+            preview_v,
+            pv_a=preview_a,
+            sim_step=sim_step,
+            preview_dt=preview_dt,
+            source=source,
+        )
+        return self.preview_s.copy(), self.preview_v.copy()
+
+    def build_preview_features_from_preceding_vehicle(
+        self,
+        preceding_vehicle,
+        preview_steps,
+        preview_dt,
+        sim_step=None,
+        use_current_ego_state=True,
+    ):
+        if preceding_vehicle is None:
+            raise ValueError("A preceding vehicle object is required to build preview features.")
+
+        front_preview_s, front_preview_v = preceding_vehicle.get_vehicle_future_states_preview(
+            expected_steps=preview_steps,
+            sim_step=sim_step,
+        )
+        if front_preview_s is None or front_preview_v is None:
+            front_preview_s, front_preview_v = preceding_vehicle.ensure_vehicle_future_states_preview(
+                preview_steps=preview_steps,
+                preview_dt=preview_dt,
+                sim_step=sim_step,
+            )
+
+        if use_current_ego_state:
+            [_, ego_v_t, ego_s_t] = self.getVehicleStates()
+            ego_preview_s = np.full(preview_steps, ego_s_t, dtype=float)
+            ego_preview_v = np.full(preview_steps, ego_v_t, dtype=float)
+        else:
+            ego_preview_s, ego_preview_v = self.get_vehicle_future_states_preview(
+                expected_steps=preview_steps,
+                sim_step=sim_step,
+            )
+            if ego_preview_s is None or ego_preview_v is None:
+                ego_preview_s, ego_preview_v = self.ensure_vehicle_future_states_preview(
+                    preview_steps=preview_steps,
+                    preview_dt=preview_dt,
+                    sim_step=sim_step,
+                )
+
+        distance_headway_preview = front_preview_s - ego_preview_s
+        speed_gap_preview = front_preview_v - ego_preview_v
+        return distance_headway_preview, speed_gap_preview
     
     def get_electricity_power(self):
         electric_consumption = traci.vehicle.getElectricityConsumption(vehID=self.ID)

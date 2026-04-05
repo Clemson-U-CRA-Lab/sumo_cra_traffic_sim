@@ -68,6 +68,182 @@ class Model_4_input(nn.Module):
         x = F.sigmoid(self.fc3(x))
         x = self.out(x)
         return x
+
+
+class PreviewModel(nn.Module):
+    def __init__(
+        self,
+        in_features=41,
+        preview_steps=20,
+        preview_channels=2,
+        ego_features=1,
+        conv_channels=16,
+        h1=512,
+        h2=512,
+        trajectory_out_features=38,
+        acceleration_h1=128,
+        acceleration_h2=128,
+        acceleration_out_features=1,
+    ):
+        super().__init__()
+        if in_features != ego_features + preview_steps * preview_channels:
+            raise ValueError("Input feature setup does not match preview sequence layout.")
+
+        self.preview_steps = preview_steps
+        self.preview_channels = preview_channels
+        self.ego_features = ego_features
+
+        self.conv1 = nn.Conv1d(
+            preview_channels, conv_channels, kernel_size=3, padding=1
+        )
+        self.conv_activation = nn.ReLU()
+        self.conv_pool = nn.AdaptiveAvgPool1d(8)
+
+        conv_output_features = conv_channels * 8
+        self.fc1 = nn.Linear(conv_output_features + ego_features, h1)
+        self.fc2 = nn.Linear(h1, h2)
+        self.trajectory_out = nn.Linear(h2, trajectory_out_features)
+        self.acceleration_fc1 = nn.Linear(trajectory_out_features, acceleration_h1)
+        self.acceleration_fc2 = nn.Linear(acceleration_h1, acceleration_h2)
+        self.acceleration_out = nn.Linear(acceleration_h2, acceleration_out_features)
+        self.dp = nn.Dropout(0.2)
+        self.acceleration_activation = nn.ReLU()
+
+    def split_input_features(self, model_input):
+        if model_input.shape[1] != self.ego_features + self.preview_steps * self.preview_channels:
+            raise ValueError(
+                "Unexpected model input feature count: expected "
+                + str(self.ego_features + self.preview_steps * self.preview_channels)
+                + ", got "
+                + str(model_input.shape[1])
+            )
+
+        ego_v = model_input[:, :self.ego_features]
+        preview_sequence = model_input[:, self.ego_features:].reshape(
+            -1, self.preview_steps, self.preview_channels
+        )
+        preview_sequence = preview_sequence.transpose(1, 2).contiguous()
+        return ego_v, preview_sequence
+
+    def forward(self, x):
+        ego_v, preview_sequence = self.split_input_features(x)
+        preview_features = self.conv_activation(self.conv1(preview_sequence))
+        preview_features = self.conv_pool(preview_features)
+        preview_features = torch.flatten(preview_features, start_dim=1)
+
+        x = torch.cat((ego_v, preview_features), dim=1)
+        x = torch.sigmoid(self.fc1(x))
+        x = self.dp(x)
+        x = torch.sigmoid(self.fc2(x))
+        x = self.dp(x)
+        trajectory_prediction = self.trajectory_out(x)
+
+        acceleration_prediction = self.acceleration_activation(
+            self.acceleration_fc1(trajectory_prediction)
+        )
+        acceleration_prediction = self.dp(acceleration_prediction)
+        acceleration_prediction = self.acceleration_activation(
+            self.acceleration_fc2(acceleration_prediction)
+        )
+        acceleration_prediction = self.dp(acceleration_prediction)
+        acceleration_prediction = self.acceleration_out(acceleration_prediction)
+        return trajectory_prediction, acceleration_prediction
+
+
+class PreviewNN_controller():
+    def __init__(
+        self,
+        nn_pt_file,
+        preview_steps=20,
+        preview_channels=2,
+        ego_features=1,
+        conv_channels=16,
+        h1=512,
+        h2=512,
+        trajectory_out_features=38,
+        acceleration_h1=128,
+        acceleration_h2=128,
+        acceleration_out_features=1,
+    ):
+        self.preview_steps = preview_steps
+        self.preview_channels = preview_channels
+        self.ego_features = ego_features
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.nn_controller = PreviewModel(
+            in_features=ego_features + preview_steps * preview_channels,
+            preview_steps=preview_steps,
+            preview_channels=preview_channels,
+            ego_features=ego_features,
+            conv_channels=conv_channels,
+            h1=h1,
+            h2=h2,
+            trajectory_out_features=trajectory_out_features,
+            acceleration_h1=acceleration_h1,
+            acceleration_h2=acceleration_h2,
+            acceleration_out_features=acceleration_out_features,
+        )
+        self.nn_controller.eval()
+        self.nn_controller.load_state_dict(torch.load(nn_pt_file, map_location=self.device))
+        self.nn_controller.to(self.device)
+
+    def build_model_input(self, ego_vt, distance_headway_preview, speed_gap_preview):
+        ego_vt = np.asarray(ego_vt, dtype=np.float32).reshape(-1)
+        distance_headway_preview = np.asarray(
+            distance_headway_preview, dtype=np.float32
+        )
+        speed_gap_preview = np.asarray(speed_gap_preview, dtype=np.float32)
+
+        if distance_headway_preview.ndim == 1:
+            distance_headway_preview = distance_headway_preview.reshape(1, -1)
+        if speed_gap_preview.ndim == 1:
+            speed_gap_preview = speed_gap_preview.reshape(1, -1)
+
+        if distance_headway_preview.shape != speed_gap_preview.shape:
+            raise ValueError("Distance-headway preview and speed-gap preview must have the same shape.")
+        if distance_headway_preview.shape[1] != self.preview_steps:
+            raise ValueError(
+                "Preview input length mismatch: expected "
+                + str(self.preview_steps)
+                + ", got "
+                + str(distance_headway_preview.shape[1])
+            )
+        if ego_vt.shape[0] != distance_headway_preview.shape[0]:
+            raise ValueError("Ego speed batch size must match preview batch size.")
+
+        model_input = np.zeros(
+            (ego_vt.shape[0], self.ego_features + self.preview_steps * self.preview_channels),
+            dtype=np.float32,
+        )
+        model_input[:, 0] = ego_vt
+        for step in range(self.preview_steps):
+            feature_start = self.ego_features + step * self.preview_channels
+            model_input[:, feature_start] = distance_headway_preview[:, step]
+            model_input[:, feature_start + 1] = speed_gap_preview[:, step]
+
+        return torch.from_numpy(model_input).to(self.device)
+
+    def step_forward(
+        self,
+        ego_vt,
+        distance_headway_preview,
+        speed_gap_preview,
+        return_trajectory=False,
+    ):
+        model_input = self.build_model_input(
+            ego_vt=ego_vt,
+            distance_headway_preview=distance_headway_preview,
+            speed_gap_preview=speed_gap_preview,
+        )
+
+        with torch.no_grad():
+            trajectory_prediction, acceleration_prediction = self.nn_controller(model_input)
+
+        trajectory_prediction = trajectory_prediction.detach().cpu().numpy()
+        acceleration_prediction = acceleration_prediction.detach().cpu().numpy().flatten()
+
+        if return_trajectory:
+            return acceleration_prediction.tolist(), trajectory_prediction
+        return acceleration_prediction.tolist()
         
 class NN_controller():
     def __init__(self, nn_pt_file, input_num):
@@ -122,38 +298,3 @@ class NN_controller():
             ego_a_tgt = s_a_nn
 
         return ego_a_tgt
-class lookup_table_controller():
-    def __init__(self, table_filename, max_s1, max_s2, max_dv, num_s1, num_s2, num_dv):
-        self.s1_range = np.linspace(-1.0, max_s1, num_s1)
-        self.s2_range = np.linspace(-1.0, max_s2, num_s2)
-        self.dv_range = np.linspace(-1.0, max_dv, num_dv)
-        
-        with open(table_filename, 'rb') as f:
-            u_table = np.load(f)
-        
-        self.fn_table = RegularGridInterpolator((self.s1_range, self.s2_range, self.dv_range), u_table)
-    
-    def step_forward(self, ds1, ds2, ego_v_t):
-        input_vec = np.array([ds1, ds2, ego_v_t])
-        s_a_table_tgt = (self.fn_table(input_vec.T).tolist())
-        
-        return s_a_table_tgt
-        
-    def pred_s(self, ego_s, veh_a, veh_v, veh_s, Dt = 3):
-        if veh_v + veh_a * Dt < 0:
-            t_to_stop = np.abs(veh_v / veh_a)
-            ds1 = veh_s - ego_s
-            ds2 = veh_v * Dt + 0.5 * veh_a * t_to_stop ** 2
-        else:
-            ds1 = veh_s - ego_s
-            ds2 = veh_v * Dt + 0.5 * veh_a * Dt ** 2
-        
-        return ds1, ds2
-    
-    def preview_s(self, sim_t, ego_s, veh_init, veh_s, cycle_t, cycle_s, Dt = 3):
-        t_id_terminal = np.argmin(np.abs(np.array(cycle_t) - (sim_t + Dt)))
-        cycle_terminal = cycle_s[t_id_terminal]
-        ds1 = veh_s - ego_s
-        ds2 = cycle_terminal - veh_s + veh_init
-        
-        return ds1, ds2
