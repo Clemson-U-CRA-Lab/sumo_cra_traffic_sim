@@ -16,31 +16,25 @@ from x2v_constants import *
 
 # logging utils
 from  utils_logging import *
+csv_header = csv_header + ["gap [m]", "headway [s]", "ttc [s]"]
+
+
 data = np.zeros([int(END_TIME/SIM_STEP)+1,len(csv_header)])
 logRunning_ = False
 if logRunning_:
     fileNameTemp = 'sumoSim_v2x_logRuntime' + datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.csv'
-
-# Comms
-asyncSocket = True
-# interface = 'periodicInterface' # 'latency'
-interface = 'periodicInterface' # 'latency', 'naiveAsync', 'hybrid', 'periodicInterface', 'periodic_sendDelay'
 
 
 # Run params
 guiSumo = True
 vizTraj = False
 testWithoutGPS = BOOL_TEST_WITHOUT_GPS
-verbosity = False
+verbosity = True
 
 
-if asyncSocket:
-    if interface == 'periodicInterface':
-        from x2vSocketInterface_Udp_periodic import x2vSocketInterfaceAsync as x2vSocketInterface
-    else:
-        raise ValueError("Invalid interface type. Choose 'periodicInterface', 'latency', or 'naiveAsync'.")
-else:
-    from x2vSocketInterface import x2vSocketInterface as x2vSocketInterface
+# UDP socket interface
+asyncSocket = True
+from x2vSocketInterface_Udp_periodic import x2vSocketInterfaceUdpAsync as x2vSocketInterface
 
 
 if __name__=="__main__":
@@ -59,8 +53,14 @@ if __name__=="__main__":
     veh_1_lane = []
     veh_1_acc = []
     mache_accCmd = []
+    gap_hist = []
+    headway_hist = []
+    ttc_hist = []
     
     veh_sim_t = []
+    pre_attack_matrix = []
+    pre_attack_cycle_ss = []
+    pre_attack_cycle_vs = []
     
     runtime_record = []
     
@@ -87,7 +87,6 @@ if __name__=="__main__":
     else:
         print('No controller for all vehicles')
         
-
 
 
     # Start simulation 
@@ -123,19 +122,16 @@ if __name__=="__main__":
         # Assign speeds to leading vehicle
         v_lead_id = np.argmin(np.abs([record_t - sim_time]))
         v_tgt_lead = front_v_t[v_lead_id]
-        if STALLTIME  < sim_time < (STALLENDTIME) and DEMO_COLLISION:
+        if STALLTIME  < sim_time < (STALLENDTIME) and DEMO_STALL_NV0:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=0)
         else:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=v_tgt_lead)
         # Get vehicle states
         veh_states_matrix = [sumo_sim_manager.getVehicleStates(veh, returnStatesNum=5) for veh in vehicle_list]
+        current_gap = get_gap(veh_states_matrix[0][3], veh_states_matrix[1][3])
+        current_headway = get_headway(veh_states_matrix[0][3], veh_states_matrix[1][3], veh_states_matrix[1][2])
+        current_ttc = get_ttc(veh_states_matrix[0][3], veh_states_matrix[1][3], veh_states_matrix[0][2], veh_states_matrix[1][2])
 
-        if STALLTIME  < sim_time < (STALLENDTIME) and DEMO_COLLISION:
-            v_hold = 5.0 # front vehicle's speed at stall time
-            veh_states_matrix[0][2] = v_hold
-            veh_states_matrix[0][3] = veh_states_matrix[0][3] + v_hold*SIM_STEP 
-            veh_states_matrix[0][1] = 0.9 # update front vehicle's acc to 0, and update its s according to hold speed. This is to simulate the front vehicle stalled but not disappearing, which is common in real life.
-        
         # SOLVE CONOTROL
         # Run MPC control if enabled
         start_t = time.time()
@@ -160,6 +156,12 @@ if __name__=="__main__":
                 acc[veh] = 0.0
         runtime_record.append(time.time() - start_t)
 
+        # store current payload for potential attack use
+        if not ATTACK_ACTIVE:
+            pre_attack_matrix = veh_states_matrix
+            pre_attack_cycle_ss = cycle_ss
+            pre_attack_cycle_vs = cycle_vs
+        
         # viz traj
         if guiSumo and  vizTraj:
             sumo_sim_manager.add_traj_leader("nv0", 
@@ -171,53 +173,42 @@ if __name__=="__main__":
                                             colorChoice=(255,255,100), fill=False, layer=3)
             sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(0, 255, 2, 100), fill=False, layer=4)
            
-        # Assign the acceleration to leader nv0
-        if STALLTIME < sim_time < (STALLENDTIME):
-            # Stalling it
-            sim_nv_array = [sim_time, 
-                            veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
-                            veh_states_matrix[0][3], veh_states_matrix[0][2], veh_states_matrix[0][1]  # front
-                            ] + [veh_states_matrix[0][3]]*REF_CYCLE_STAGES + [0.0]*REF_CYCLE_STAGES # front's s, front's v
+        # Update sim array
+        if BOOL_ATTACK and ATTACK_START_TIME < sim_time < ATTACK_END_TIME:
+            # manipulate sim data
+            ATTACK_ACTIVE = True
+            print(f"{bcolors.FAIL_RED}*** ATTACK ACTIVE ***{bcolors.ENDC}")
+
+            if ATTACK_TYPE == "REPLAY":
+                sim_nv_array = [sim_time, 
+                                veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
+                                pre_attack_matrix[0][3], pre_attack_matrix[0][2], pre_attack_matrix[0][1]  # front
+                                ] + [x for x in pre_attack_cycle_ss] + [x for x in pre_attack_cycle_vs] # front's s, front's v   
+                            # [veh_states_matrix[0][3]]*REF_CYCLE_STAGES + [0.0]*REF_CYCLE_STAGES # front's s, front's v
+            elif ATTACK_TYPE == "SPOOF_ENERGENCY":
+                spoof_offset = 3.5
+                sim_nv_array = [sim_time, 
+                                veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
+                                veh_states_matrix[0][3] + spoof_offset, 0.0, 0.0  # front: spoof stop
+                                ] + [veh_states_matrix[0][3]]*REF_CYCLE_STAGES + [0.0]*REF_CYCLE_STAGES # front's s, front's v
+            else:
+                raise ValueError("Invalid ATTACK_TYPE. Choose 'REPLAY' or 'CUTOFF'.")
+        
         else:
+            ATTACK_ACTIVE = False
             # sim_time, ego_s, ego_v, ego_a  front_s, front_v, front_a, ...
             sim_nv_array = [sim_time, 
                             veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
                             veh_states_matrix[0][3], veh_states_matrix[0][2], veh_states_matrix[0][1]  # front
                             ] + [x for x in cycle_ss] + [x for x in cycle_vs] # front's s, front's v   
 
-        if sim_time > ATTACK_START_TIME and BOOL_ATTACK and not ATTACK_ACTIVE:
-            print(f"{bcolors.FAIL_RED}***** Starting Attack! *****{bcolors.ENDC}")
-            sockInt.send_delay_sec = DELAY_SECONDS
-            ATTACK_ACTIVE = True
 
-
-              #########
       
         # Send NV states to realCAV
-        if interface == 'periodicInterface':
-            with sockInt.simData_lock:
-                sockInt.latest_sim_data = sim_nv_array
-        else:
-            raise ValueError("Invalid interface type. Choose 'periodicInterface', 'latency', or 'naiveAsync'.")
-
-            #########
-
+        with sockInt.simData_lock:
+            sockInt.latest_sim_data = sim_nv_array
         realCavArray = sockInt.get_veh_info()
 
-        if interface == 'hybrid' and sim_time % 1.0 < SIM_STEP:
-            stats = sockInt.get_stats()
-            print(f"{bcolors.WARNING}[Hybrid Debug] Queue: {stats['queue_len']} | Jitter: {stats['jitter_s']:.3f}s{bcolors.ENDC}")
-
-        if interface == 'latency':
-            # === Debug: Observe DoS-induced latency ===
-            if sim_time % 1.0 < SIM_STEP:  # Print every ~1 second
-                stats = sockInt.get_stats()
-                qlen = stats["queue_len"]
-                jitter = stats["jitter_s"]
-                print(f"{bcolors.WARNING}[Latency Debug] Queue Length: {qlen} | Jitter: {jitter:.3f}s{bcolors.ENDC}")
-
-
-            #########
 
         if realCavArray is not None:        
             if verbosity:
@@ -227,22 +218,18 @@ if __name__=="__main__":
                 print(f"{bcolors.OKCYAN}Ego x,y: {realCavArray[4]:.2f}, {realCavArray[5]:.2f}.{bcolors.ENDC}" )
                 print(f"{bcolors.OKCYAN}Ego [GPS] s: -- , v:{realCavArray[2]:.2f}.{bcolors.ENDC}" )
                 print(f"{bcolors.OKCYAN}Ego MpcCmd: {realCavArray[7]:.2f}.{bcolors.ENDC}" )
+                print(f"{bcolors.OKCYAN}Gap: {current_gap:.2f} m | Headway: {current_headway:.2f} s | TTC: {current_ttc:.2f} s{bcolors.ENDC}")
 
             # collided = True if veh_states_matrix[0][3] - veh_states_matrix[1][3] < 3.2 else False
 
             print(f"{bcolors.OKBLUE}Sim Time: {sim_time:.2f} | {bcolors.OKBLUE}Vehicle's SimTime: {realCavArray[0]:.3f} |  {bcolors.OKGREEN}Delta RTT: {sim_time-realCavArray[0]:.2f}.{bcolors.ENDC}" )
-
-
+            
             # Update Real CAV pos in simulation:         
             if testWithoutGPS:
                 # print(f"{bcolors.FAIL_RED}Delta MpcCmd: {realCavArray[7]- acc['nv1']:.2f} | {bcolors.OKBLUE}VehCmd: {realCavArray[7]:.3f} |  {bcolors.OKGREEN}ExpectSim: {acc['nv1']:.3f}.{bcolors.ENDC}" )
                 # if local testing w/o gps:
                 sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=realCavArray[7], dt=SUMO_ACC_INTEGRATE_DT) # careful: assign commmand or real sensed acc?
                 # sumo_sim_manager.assignAcceleration(vehicle_ID="nv1", tgt_acc=acc['nv1'], dt=SUMO_ACC_INTEGRATE_DT) # careful: assign commmand or real sensed acc?
-
-                # sumo_sim_manager.update_CAV_in_sumo(veh='nv1', 
-                                                        # spd=realCavArray[2]+realCavArray[7]*SUMO_ACC_INTEGRATE_DT)
-                                                        # dist = realCavArray[2]*SUMO_ACC_INTEGRATE_DT  + 0.5*realCavArray[7]*SUMO_ACC_INTEGRATE_DT**2)            
 
             else:
                 # if testing with gps and vehicle run
@@ -259,11 +246,15 @@ if __name__=="__main__":
             veh_1_spd.append(veh_states_matrix[1][2])
             veh_1_dist.append(veh_states_matrix[1][3])
             mache_accCmd.append(realCavArray[7])
+            gap_hist.append(current_gap)
+            headway_hist.append(current_headway)
+            ttc_hist.append(current_ttc)
         
             veh_sim_t.append(sim_time)
             data[sumo_sim_manager.step,:] = ([real_now-real_start_time, sim_time, realCavArray[0], runtime_record[-1],
                         veh_states_matrix[0][3],0.0,veh_states_matrix[0][2],veh_states_matrix[0][1],
-                        veh_states_matrix[1][3],0.0,veh_states_matrix[1][2],veh_states_matrix[1][1], realCavArray[7]])
+                        veh_states_matrix[1][3],0.0,veh_states_matrix[1][2],veh_states_matrix[1][1], realCavArray[7],
+                        current_gap, current_headway, current_ttc])
             
         if logRunning_:
             with open(fileNameTemp, "a", newline="") as csv_file:
@@ -273,11 +264,7 @@ if __name__=="__main__":
 
         # Sleep timing
         real_now = time.monotonic()
-        # if asyncSocket:
-        #     sleep_time = max(0, real_expected_time - real_now)  # Sleep only if ahead of real time
-        #     time.sleep(sleep_time)  # Sync with real-world time
-        # print(f"{bcolors.OKGREEN}Delta T RSPC[Sim-Real]: {((real_now - real_start_time)-sim_time):.2f}s{bcolors.ENDC}")
-    
+
         ## Fixed rate scheduling.
         if asyncSocket:
             next_deadline += SIM_STEP         # fixed cadence
@@ -296,32 +283,52 @@ if __name__=="__main__":
 
     plt.figure(1)
     
-    plt.subplot(3,1,1)
+    plt.subplot(5,1,1)
     plt.plot(record_t, front_s_t, 'r:') 
     plt.plot(veh_sim_t, veh_0_dist,'k--')
     plt.plot(veh_sim_t, veh_1_dist,'b--')
+    plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
     # plt.plot(veh_sim_t, veh_3_dist)
     plt.xlabel('Time [s]')
     plt.ylabel('Distance from route edge [m]')
-    plt.legend(['US06 Ref', 'Leading Vehicle',  'mache'])
+    plt.legend(['US06 Ref', 'Leading Vehicle',  'mache', 'Attack Period'])
     
-    plt.subplot(3,1,2)
+    plt.subplot(5,1,2)
     plt.plot(record_t, front_v_t, 'r:') 
     plt.plot(veh_sim_t, veh_0_spd, 'k--')
     plt.plot(veh_sim_t, veh_1_spd, 'b--')
+    plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
     # plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Speed [m/s]')
-    plt.legend(['US06 Ref', 'Leading Vehicle','mache'])
+    plt.legend(['US06 Ref', 'Leading Vehicle','mache', 'Attack Period'])
 
-    plt.subplot(3,1,3)
+    plt.subplot(5,1,3)
     plt.plot(veh_sim_t, veh_0_acc, 'k--')
     plt.plot(veh_sim_t, veh_1_acc,'b--')
     plt.plot(veh_sim_t, mache_accCmd, 'g--')
+    plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
     # plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Acc [m/s^2]')
-    plt.legend(['Leading Vehicle', 'mache', 'mache_accCmd'])
+    plt.legend(['Leading Vehicle', 'mache', 'mache_accCmd', 'Attack Period'])
+
+    plt.subplot(5,1,4)
+    plt.plot(veh_sim_t, gap_hist, 'm--')
+    plt.plot(veh_sim_t, headway_hist, 'c--')
+    plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
+    plt.xlabel('Time [s]')
+    plt.ylabel('Gap/Headway')
+    plt.ylim(0, 40)
+    plt.legend(['Gap [m]', 'Headway [s]', 'Attack Period'])
+
+    plt.subplot(5,1,5)
+    plt.plot(veh_sim_t, ttc_hist, 'r--')
+    plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
+    plt.ylim(0, 30)
+    plt.xlabel('Time [s]')
+    plt.ylabel('TTC [s]')
+    plt.legend(['TTC [s]', 'Attack Period'])
     
     plt.savefig(prefix+ datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.png')
     plt.show()

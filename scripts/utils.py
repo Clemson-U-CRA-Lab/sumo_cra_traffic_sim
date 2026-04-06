@@ -294,3 +294,24 @@ class bcolors:
     FAIL_RED =  '\033[91m'
     HEADER_MAGENTA = '\033[95m'
     WARNING_YELLOW = '\033[93m'
+
+
+def get_gap(front_s, ego_s, vehicle_length=3.2):
+    return front_s - ego_s - vehicle_length
+
+
+def get_headway(front_s, ego_s, ego_v, vehicle_length=3.2):
+    gap = get_gap(front_s, ego_s, vehicle_length=vehicle_length)
+    if ego_v <= 0.0:
+        return float("inf")
+    return gap / ego_v
+
+
+def get_ttc(front_s, ego_s, front_v, ego_v, vehicle_length=3.2):
+    gap = get_gap(front_s, ego_s, vehicle_length=vehicle_length)
+    closing_speed = ego_v - front_v
+    if gap <= 0.0:
+        return 0.0
+    if closing_speed <= 0.0:
+        return float("inf")
+    return gap / closing_speed

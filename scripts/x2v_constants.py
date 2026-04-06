@@ -63,9 +63,6 @@ SIM_STEP = 0.1
 END_TIME = 695.0 #90
 SUMO_ACC_INTEGRATE_DT = 3.0 # for traci.setAcceleration() in sumo
 SUMO_CONFIG = "v2x_2veh.sumocfg" # which config to use
-STALLTIME = 31.0
-STALLENDTIME = STALLTIME + 5.0
-
 
 # Ref for front vehicle
 REF_CYCLE_DT = 0.2
@@ -88,13 +85,18 @@ VEH_ARRAY_SIZE = 68 # 7 for simple msg
 BYTE_SIZE = 4 #8 tested with obu/rsu
 MESSAGE_BYTE_LENGTH = BYTE_SIZE*VEH_ARRAY_SIZE
 
-# Attack:
-DEMO_COLLISION = False
+# Stalling nv0 manually
+DEMO_STALL_NV0 = False
+STALLTIME = 31.0
+STALLENDTIME = STALLTIME + 5.0
+
+# Attack details
 BOOL_ATTACK = False
-# ATTACK_INTENSITY = 30 # how old a frame: - 
-# 30@10hz, 15@10hz, 5@10hz, 3@10hz, 30@100hz
-DELAY_SECONDS = 4.0
-ATTACK_START_TIME = 22.0 # seconds into the sim when attack starts
+ATTACK_TYPE = "SPOOF_ENERGENCY" # "REPLAY", "CUTOFF", "SPOOF_EMERGENCY"
+ATTACK_START_TIME = 31.0 # seconds into the sim when attack starts
+ATTACK_END_TIME = ATTACK_START_TIME + 15.0
 ATTACK_ACTIVE = False
 
-
+# ATTACK_INTENSITY = 30 # how old a frame: - 
+# 30@10hz, 15@10hz, 5@10hz, 3@10hz, 30@100hz
+DELAY_SECONDS = 4.0 # for tcp only
