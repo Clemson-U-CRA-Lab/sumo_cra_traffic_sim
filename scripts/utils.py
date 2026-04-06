@@ -81,6 +81,8 @@ class SUMO_vehicles():
         self.preview_sim_step = None
         self.preview_source = None
         self.preview_num_steps = 0
+        self.preview_ref_s = None
+        self.preview_ref_v = None
         self.pv_s_prev = None
         self.pv_v_prev = None
 
@@ -148,6 +150,7 @@ class SUMO_vehicles():
         sim_step=None,
         preview_dt=None,
         source=None,
+        is_relative=False,
     ):
         preview_s = self._normalize_preview_array(pv_s, "Preview position array")
         preview_v = self._normalize_preview_array(pv_v, "Preview speed array")
@@ -164,13 +167,21 @@ class SUMO_vehicles():
         else:
             preview_a = None
 
-        self.preview_s = preview_s.copy()
-        self.preview_v = preview_v.copy()
+        [_, current_v_t, current_s_t] = self.getVehicleStates()
+        self.preview_ref_s = current_s_t
+        self.preview_ref_v = current_v_t
+
+        if is_relative:
+            self.preview_s = preview_s.copy()
+            self.preview_v = preview_v.copy()
+        else:
+            self.preview_s = preview_s.copy() - self.preview_ref_s
+            self.preview_v = preview_v.copy() - self.preview_ref_v
         self.preview_a = None if preview_a is None else preview_a.copy()
         self.preview_dt = preview_dt
         self.preview_sim_step = sim_step
         self.preview_source = source
-        self.preview_num_steps = preview_s.size
+        self.preview_num_steps = self.preview_s.size
         self.pv_s_prev = self.preview_s
         self.pv_v_prev = self.preview_v
 
@@ -182,6 +193,8 @@ class SUMO_vehicles():
         self.preview_sim_step = None
         self.preview_source = None
         self.preview_num_steps = 0
+        self.preview_ref_s = None
+        self.preview_ref_v = None
         self.pv_s_prev = None
         self.pv_v_prev = None
 
@@ -201,6 +214,17 @@ class SUMO_vehicles():
         ):
             return None, None
         return self.preview_s.copy(), self.preview_v.copy()
+
+    def get_vehicle_future_states_preview_absolute(self, expected_steps=None, sim_step=None):
+        preview_s, preview_v = self.get_vehicle_future_states_preview(
+            expected_steps=expected_steps,
+            sim_step=sim_step,
+        )
+        if preview_s is None or preview_v is None:
+            return None, None
+        if self.preview_ref_s is None or self.preview_ref_v is None:
+            raise ValueError("Preview reference state is missing for absolute preview reconstruction.")
+        return preview_s + self.preview_ref_s, preview_v + self.preview_ref_v
 
     def predict_constant_acceleration_preview(self, preview_steps, preview_dt, clip_min_speed=0.0):
         [veh_a_t, veh_v_t, veh_s_t] = self.getVehicleStates()
@@ -262,14 +286,18 @@ class SUMO_vehicles():
         if preceding_vehicle is None:
             raise ValueError("A preceding vehicle object is required to build preview features.")
 
-        front_preview_s, front_preview_v = preceding_vehicle.get_vehicle_future_states_preview(
+        front_preview_s, front_preview_v = preceding_vehicle.get_vehicle_future_states_preview_absolute(
             expected_steps=preview_steps,
             sim_step=sim_step,
         )
         if front_preview_s is None or front_preview_v is None:
-            front_preview_s, front_preview_v = preceding_vehicle.ensure_vehicle_future_states_preview(
+            preceding_vehicle.ensure_vehicle_future_states_preview(
                 preview_steps=preview_steps,
                 preview_dt=preview_dt,
+                sim_step=sim_step,
+            )
+            front_preview_s, front_preview_v = preceding_vehicle.get_vehicle_future_states_preview_absolute(
+                expected_steps=preview_steps,
                 sim_step=sim_step,
             )
 
@@ -278,14 +306,18 @@ class SUMO_vehicles():
             ego_preview_s = np.full(preview_steps, ego_s_t, dtype=float)
             ego_preview_v = np.full(preview_steps, ego_v_t, dtype=float)
         else:
-            ego_preview_s, ego_preview_v = self.get_vehicle_future_states_preview(
+            ego_preview_s, ego_preview_v = self.get_vehicle_future_states_preview_absolute(
                 expected_steps=preview_steps,
                 sim_step=sim_step,
             )
             if ego_preview_s is None or ego_preview_v is None:
-                ego_preview_s, ego_preview_v = self.ensure_vehicle_future_states_preview(
+                self.ensure_vehicle_future_states_preview(
                     preview_steps=preview_steps,
                     preview_dt=preview_dt,
+                    sim_step=sim_step,
+                )
+                ego_preview_s, ego_preview_v = self.get_vehicle_future_states_preview_absolute(
+                    expected_steps=preview_steps,
                     sim_step=sim_step,
                 )
 

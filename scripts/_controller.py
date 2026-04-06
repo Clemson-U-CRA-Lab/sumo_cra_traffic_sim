@@ -94,7 +94,7 @@ class PreviewModel(nn.Module):
         self.ego_features = ego_features
 
         self.conv1 = nn.Conv1d(
-            preview_channels, conv_channels, kernel_size=3, padding=1
+            preview_channels, conv_channels, kernel_size=5, padding=1
         )
         self.conv_activation = nn.ReLU()
         self.conv_pool = nn.AdaptiveAvgPool1d(8)
@@ -164,10 +164,12 @@ class PreviewNN_controller():
         acceleration_h1=128,
         acceleration_h2=128,
         acceleration_out_features=1,
+        safe_distance_headway=8.0,
     ):
         self.preview_steps = preview_steps
         self.preview_channels = preview_channels
         self.ego_features = ego_features
+        self.safe_distance_headway = safe_distance_headway
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.nn_controller = PreviewModel(
             in_features=ego_features + preview_steps * preview_channels,
@@ -185,6 +187,10 @@ class PreviewNN_controller():
         self.nn_controller.eval()
         self.nn_controller.load_state_dict(torch.load(nn_pt_file, map_location=self.device))
         self.nn_controller.to(self.device)
+
+    def CBF_acceleration_bound_check(self, pv_vt, s_vt, pv_st, s_st, tao, alpha, L):
+        a_ego_max = (pv_vt - s_vt + alpha * (pv_st - s_st - L - tao * s_vt)) / tao
+        return a_ego_max
 
     def build_model_input(self, ego_vt, distance_headway_preview, speed_gap_preview):
         ego_vt = np.asarray(ego_vt, dtype=np.float32).reshape(-1)
@@ -210,6 +216,8 @@ class PreviewNN_controller():
         if ego_vt.shape[0] != distance_headway_preview.shape[0]:
             raise ValueError("Ego speed batch size must match preview batch size.")
 
+        distance_headway_preview = distance_headway_preview - self.safe_distance_headway
+
         model_input = np.zeros(
             (ego_vt.shape[0], self.ego_features + self.preview_steps * self.preview_channels),
             dtype=np.float32,
@@ -227,6 +235,13 @@ class PreviewNN_controller():
         ego_vt,
         distance_headway_preview,
         speed_gap_preview,
+        pv_vt=None,
+        pv_st=None,
+        s_st=None,
+        sim_t=None,
+        lambda_smooth=0.0,
+        s_at=None,
+        use_cbf_safety=True,
         return_trajectory=False,
     ):
         model_input = self.build_model_input(
@@ -240,6 +255,33 @@ class PreviewNN_controller():
 
         trajectory_prediction = trajectory_prediction.detach().cpu().numpy()
         acceleration_prediction = acceleration_prediction.detach().cpu().numpy().flatten()
+
+        if s_at is not None and lambda_smooth > 0.0:
+            s_at = np.asarray(s_at, dtype=float).reshape(-1)
+            acceleration_prediction = (
+                acceleration_prediction + lambda_smooth * s_at
+            ) / (1.0 + lambda_smooth)
+
+        if use_cbf_safety:
+            if pv_vt is None or pv_st is None or s_st is None:
+                raise ValueError(
+                    "pv_vt, pv_st, and s_st are required when use_cbf_safety is enabled."
+                )
+            a_ego_max = self.CBF_acceleration_bound_check(
+                pv_vt=np.asarray(pv_vt, dtype=float).reshape(-1),
+                s_vt=np.asarray(ego_vt, dtype=float).reshape(-1),
+                pv_st=np.asarray(pv_st, dtype=float).reshape(-1),
+                s_st=np.asarray(s_st, dtype=float).reshape(-1),
+                tao=0.5,
+                alpha=2.0,
+                L=6.0,
+            )
+            if np.any(acceleration_prediction > a_ego_max):
+                if sim_t is not None:
+                    print(
+                        f"CBF safety constraint is violated at time {sim_t}! Adjusting preview NN control to ensure safety..."
+                    )
+                acceleration_prediction = np.minimum(acceleration_prediction, a_ego_max)
 
         if return_trajectory:
             return acceleration_prediction.tolist(), trajectory_prediction

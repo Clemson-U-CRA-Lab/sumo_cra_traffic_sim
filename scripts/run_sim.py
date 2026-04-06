@@ -16,14 +16,11 @@ import random
 PREVIEW_STEPS = 20
 PREVIEW_DT = 0.5
 PREVIEW_TRAJECTORY_GAP_FEATURES = 19
+PREVIEW_SAFE_DISTANCE_HEADWAY = 8.0
 
 
 def preview_trajectory_to_vehicle_preview(
-    preceding_preview_s,
-    preceding_preview_v,
     trajectory_prediction,
-    current_distance_headway,
-    current_speed_gap,
 ):
     trajectory_prediction = np.asarray(trajectory_prediction, dtype=float).reshape(-1)
     if trajectory_prediction.size != PREVIEW_TRAJECTORY_GAP_FEATURES * 2:
@@ -34,16 +31,70 @@ def preview_trajectory_to_vehicle_preview(
             + str(trajectory_prediction.size)
         )
 
-    predicted_distance_headway = np.concatenate(
-        ([current_distance_headway], trajectory_prediction[:PREVIEW_TRAJECTORY_GAP_FEATURES])
+    ego_preview_s = np.concatenate(
+        ([0.0], trajectory_prediction[:PREVIEW_TRAJECTORY_GAP_FEATURES])
     )
-    predicted_speed_gap = np.concatenate(
-        ([current_speed_gap], trajectory_prediction[PREVIEW_TRAJECTORY_GAP_FEATURES:])
+    ego_preview_v = np.concatenate(
+        ([0.0], trajectory_prediction[PREVIEW_TRAJECTORY_GAP_FEATURES:])
+    )
+    return ego_preview_s, ego_preview_v
+
+
+def initialize_preview_animation(preview_steps, vehicle_index):
+    plt.ion()
+    figure, axes = plt.subplots(2, 1, num="Preview State Animation", figsize=(8, 6))
+    preview_horizon = np.arange(1, preview_steps + 1)
+
+    distance_headway_line, = axes[0].plot(preview_horizon, np.zeros(preview_steps), "b-o")
+    axes[0].set_ylabel("Distance Headway [m]")
+    axes[0].set_xlabel("Preview Step")
+    axes[0].set_title("Preview States for veh" + str(vehicle_index))
+    axes[0].grid(True)
+
+    speed_gap_line, = axes[1].plot(preview_horizon, np.zeros(preview_steps), "r-o")
+    axes[1].set_ylabel("Speed Gap [m/s]")
+    axes[1].set_xlabel("Preview Step")
+    axes[1].grid(True)
+
+    plt.tight_layout()
+    return {
+        "figure": figure,
+        "axes": axes,
+        "preview_horizon": preview_horizon,
+        "distance_headway_line": distance_headway_line,
+        "speed_gap_line": speed_gap_line,
+    }
+
+
+def update_preview_animation(
+    preview_animation,
+    sim_t,
+    vehicle_index,
+    distance_headway_preview,
+    speed_gap_preview,
+):
+    if preview_animation is None:
+        return
+    if not plt.fignum_exists(preview_animation["figure"].number):
+        return
+
+    distance_headway_preview = np.asarray(distance_headway_preview, dtype=float).reshape(-1)
+    speed_gap_preview = np.asarray(speed_gap_preview, dtype=float).reshape(-1)
+
+    preview_animation["distance_headway_line"].set_ydata(distance_headway_preview)
+    preview_animation["speed_gap_line"].set_ydata(speed_gap_preview)
+
+    preview_animation["axes"][0].set_title(
+        "Preview States for veh" + str(vehicle_index) + " at t=" + str(round(sim_t, 2)) + " s"
     )
 
-    ego_preview_s = preceding_preview_s - predicted_distance_headway
-    ego_preview_v = preceding_preview_v - predicted_speed_gap
-    return ego_preview_s, ego_preview_v
+    preview_animation["axes"][0].relim()
+    preview_animation["axes"][0].autoscale_view()
+    preview_animation["axes"][1].relim()
+    preview_animation["axes"][1].autoscale_view()
+
+    preview_animation["figure"].canvas.draw_idle()
+    plt.pause(0.001)
 
 
 class sumo_sim():
@@ -82,7 +133,9 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--logging_sim", help="whether to save the simulation data", action="store_true")
     parser.add_argument("--plot_result", help="whether to plot result after sim stop", default=False, action="store_true")
-    parser.add_argument("--num_sv", type=int, default=5.0, help="Number of vehicles in the traffic")
+    parser.add_argument("--animate_preview", help="show live preview-state animation", action="store_true")
+    parser.add_argument("--preview_vehicle_index", type=int, default=1, help="vehicle index used for preview animation")
+    parser.add_argument("--num_sv", type=int, default=2.0, help="Number of vehicles in the traffic")
     parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy', 'Ftp', 'US06','FTPsec1','FTPsec2','FTPsec3'], help='Choose leading vehicles speed profile')
     parser.add_argument("control_type", choices=['MPC', 'NN', 'PreviewNN', 'IDM'], help='Choose control method for traffic vehicles')
     args = parser.parse_args()
@@ -174,6 +227,7 @@ if __name__=="__main__":
         Preview_control = PreviewNN_controller(
             nn_pt_file=preview_nn_pt_filename,
             preview_steps=PREVIEW_STEPS,
+            safe_distance_headway=PREVIEW_SAFE_DISTANCE_HEADWAY,
         )
         controller_name = 'Preview_Neural_Network'
         print('Use preview neural network to control traffic vehicles')
@@ -201,6 +255,15 @@ if __name__=="__main__":
     pv_v = []
     lead_s = 600.0
     end_s = 0.0
+    preview_animation = None
+
+    if args.animate_preview:
+        if args.preview_vehicle_index <= 0 or args.preview_vehicle_index >= num_veh:
+            raise ValueError("Preview animation vehicle index must be between 1 and num_sv - 1.")
+        preview_animation = initialize_preview_animation(
+            preview_steps=PREVIEW_STEPS,
+            vehicle_index=args.preview_vehicle_index,
+        )
     
     while sumo_sim_manager.step * 0.1 < record_t[-1] + 30:
         sumo_sim_manager.simulationStepForward()
@@ -268,7 +331,7 @@ if __name__=="__main__":
                                                                      veh_1_acc_t, veh_1_spd_t, veh_1_dist_t,
                                                                      sim_t, online_MPC_control, record_t,
                                                                      front_v_t, 0.5, pv_object=sumo_sim_manager.sumo_veh[i-1],
-                                                                     ego_object=sumo_sim_manager.sumo_veh[i], leading_preview=False)
+                                                                     ego_object=sumo_sim_manager.sumo_veh[i], leading_preview=True)
             elif USING_NEURAL_NETWORK or USING_IDM:
                 s_vt_traffic.append(veh_1_spd_t)
                 pv_vt_traffic.append(veh_0_spd_t)
@@ -290,21 +353,22 @@ if __name__=="__main__":
                 preview_distance_headway_traffic.append(distance_headway_preview)
                 preview_speed_gap_traffic.append(speed_gap_preview)
 
-                current_distance_headway = veh_0_dist_t - veh_1_dist_t
-                current_speed_gap = veh_0_spd_t - veh_1_spd_t
                 acc_prediction, trajectory_prediction = Preview_control.step_forward(
                     ego_vt=np.array([veh_1_spd_t]),
                     distance_headway_preview=np.array([distance_headway_preview]),
                     speed_gap_preview=np.array([speed_gap_preview]),
+                    pv_vt=np.array([veh_0_spd_t]),
+                    pv_st=np.array([veh_0_dist_t]),
+                    s_st=np.array([veh_1_dist_t]),
+                    sim_t=sim_t,
+                    lambda_smooth=8.0,
+                    s_at=np.array([veh_1_acc_t]),
+                    use_cbf_safety=True,
                     return_trajectory=True,
                 )
                 acc = acc_prediction[0]
                 ego_preview_s, ego_preview_v = preview_trajectory_to_vehicle_preview(
-                    preceding_preview_s=sumo_sim_manager.sumo_veh[i-1].preview_s,
-                    preceding_preview_v=sumo_sim_manager.sumo_veh[i-1].preview_v,
                     trajectory_prediction=trajectory_prediction[0],
-                    current_distance_headway=current_distance_headway,
-                    current_speed_gap=current_speed_gap,
                 )
                 sumo_sim_manager.sumo_veh[i].update_vehicle_future_states_preview(
                     ego_preview_s,
@@ -312,6 +376,7 @@ if __name__=="__main__":
                     sim_step=sumo_sim_manager.step,
                     preview_dt=PREVIEW_DT,
                     source="preview_nn",
+                    is_relative=True,
                 )
                 sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc, v_max=30)
                 continue
@@ -336,12 +401,6 @@ if __name__=="__main__":
             sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0], v_max=30)
             for i in range(1, num_veh):
                 sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1], v_max=30)
-                #   if i < int(num_veh / 2):
-                #       sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1], v_max=15)
-                #   elif i > int(num_veh / 2):
-                #       sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-2], v_max=15)
-                #   else:
-                #       continue
         if USING_IDM:
             t_start = time.time()
             acc_traffic_step_t = IDM_control.IDM_acceleration(front_v=np.array([pv_vt_traffic]),
@@ -356,6 +415,26 @@ if __name__=="__main__":
         if USING_PREVIEW_NEURAL_NETWORK:
             runtime_dt =  time.time() - t_start
             print('Preview NN runtime is: ', str(round(runtime_dt * 1000, 3)), 'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
+
+        if args.animate_preview and args.preview_vehicle_index < num_veh:
+            selected_vehicle = sumo_sim_manager.sumo_veh[args.preview_vehicle_index]
+            preceding_vehicle = sumo_sim_manager.sumo_veh[args.preview_vehicle_index - 1]
+            distance_headway_preview, speed_gap_preview = (
+                selected_vehicle.build_preview_features_from_preceding_vehicle(
+                    preceding_vehicle=preceding_vehicle,
+                    preview_steps=PREVIEW_STEPS,
+                    preview_dt=PREVIEW_DT,
+                    sim_step=sumo_sim_manager.step,
+                    use_current_ego_state=True,
+                )
+            )
+            update_preview_animation(
+                preview_animation=preview_animation,
+                sim_t=sim_t,
+                vehicle_index=args.preview_vehicle_index,
+                distance_headway_preview=distance_headway_preview,
+                speed_gap_preview=speed_gap_preview,
+            )
         # Add power consumption
         Power_t.append(P_t)
         ego_state_t = sumo_sim_manager.sumo_veh[1].getVehicleStates()
@@ -382,6 +461,8 @@ if __name__=="__main__":
         time.sleep(0.001)
     
     traci.close(True)
+    if preview_animation is not None and plt.fignum_exists(preview_animation["figure"].number):
+        plt.ioff()
     
     veh_sim_t = np.array(veh_sim_t)
     
