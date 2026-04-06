@@ -134,6 +134,11 @@ if __name__=="__main__":
     parser.add_argument("--logging_sim", help="whether to save the simulation data", action="store_true")
     parser.add_argument("--plot_result", help="whether to plot result after sim stop", default=False, action="store_true")
     parser.add_argument("--animate_preview", help="show live preview-state animation", action="store_true")
+    parser.add_argument(
+        "--disable_preview_cbf",
+        help="disable CBF safety control for the PreviewNN controller",
+        action="store_true",
+    )
     parser.add_argument("--preview_vehicle_index", type=int, default=1, help="vehicle index used for preview animation")
     parser.add_argument("--num_sv", type=int, default=2.0, help="Number of vehicles in the traffic")
     parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy', 'Ftp', 'US06','FTPsec1','FTPsec2','FTPsec3'], help='Choose leading vehicles speed profile')
@@ -178,7 +183,7 @@ if __name__=="__main__":
     elif args.leading_speed_profile == 'Nyc':
         spd_filename = parent_dir + "/speed_profile/I85_nycccol.csv"
     elif args.leading_speed_profile == 'Ftp':
-        spd_filename = parent_dir + "/speed_profile/I85_ftp.csv"
+        spd_filename = parent_dir + "/speed_profile/I85_ftp_short.csv"
     elif args.leading_speed_profile == 'US06':
         spd_filename = parent_dir + "/speed_profile/US06_CMI_Urban_speed_profile.csv"
     elif args.leading_speed_profile == 'FTPsec1':
@@ -216,7 +221,7 @@ if __name__=="__main__":
     
     # Setup controller
     if USING_NEURAL_NETWORK:
-        FCN_control = NN_controller(nn_pt_file=nn_pt_filename, input_num=3)
+        FCN_control = NN_controller(nn_pt_file=nn_pt_filename, input_num=4)
         controller_name = 'Neural_Network'
         print('Use neural network to control traffic vehicles')
     elif USING_PREVIEW_NEURAL_NETWORK:
@@ -228,6 +233,7 @@ if __name__=="__main__":
             nn_pt_file=preview_nn_pt_filename,
             preview_steps=PREVIEW_STEPS,
             safe_distance_headway=PREVIEW_SAFE_DISTANCE_HEADWAY,
+            enable_cbf_safety=not args.disable_preview_cbf,
         )
         controller_name = 'Preview_Neural_Network'
         print('Use preview neural network to control traffic vehicles')
@@ -253,7 +259,7 @@ if __name__=="__main__":
     Avg_density_traffic = []
     ego_v = []
     pv_v = []
-    lead_s = 600.0
+    lead_s = 50.0
     end_s = 0.0
     preview_animation = None
 
@@ -363,7 +369,7 @@ if __name__=="__main__":
                     sim_t=sim_t,
                     lambda_smooth=8.0,
                     s_at=np.array([veh_1_acc_t]),
-                    use_cbf_safety=True,
+                    use_cbf_safety=not args.disable_preview_cbf,
                     return_trajectory=True,
                 )
                 acc = acc_prediction[0]

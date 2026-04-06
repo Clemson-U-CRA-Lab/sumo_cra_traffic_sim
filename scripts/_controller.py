@@ -81,8 +81,8 @@ class PreviewModel(nn.Module):
         h1=512,
         h2=512,
         trajectory_out_features=38,
-        acceleration_h1=128,
-        acceleration_h2=128,
+        acceleration_h1=512,
+        acceleration_h2=512,
         acceleration_out_features=1,
     ):
         super().__init__()
@@ -158,18 +158,20 @@ class PreviewNN_controller():
         preview_channels=2,
         ego_features=1,
         conv_channels=16,
-        h1=512,
-        h2=512,
+        h1=1024,
+        h2=1024,
         trajectory_out_features=38,
-        acceleration_h1=128,
-        acceleration_h2=128,
+        acceleration_h1=1024,
+        acceleration_h2=1024,
         acceleration_out_features=1,
         safe_distance_headway=8.0,
+        enable_cbf_safety=True,
     ):
         self.preview_steps = preview_steps
         self.preview_channels = preview_channels
         self.ego_features = ego_features
         self.safe_distance_headway = safe_distance_headway
+        self.enable_cbf_safety = enable_cbf_safety
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.nn_controller = PreviewModel(
             in_features=ego_features + preview_steps * preview_channels,
@@ -241,9 +243,12 @@ class PreviewNN_controller():
         sim_t=None,
         lambda_smooth=0.0,
         s_at=None,
-        use_cbf_safety=True,
+        use_cbf_safety=None,
         return_trajectory=False,
     ):
+        if use_cbf_safety is None:
+            use_cbf_safety = self.enable_cbf_safety
+
         model_input = self.build_model_input(
             ego_vt=ego_vt,
             distance_headway_preview=distance_headway_preview,
@@ -272,8 +277,8 @@ class PreviewNN_controller():
                 s_vt=np.asarray(ego_vt, dtype=float).reshape(-1),
                 pv_st=np.asarray(pv_st, dtype=float).reshape(-1),
                 s_st=np.asarray(s_st, dtype=float).reshape(-1),
-                tao=0.5,
-                alpha=2.0,
+                tao=1.0,
+                alpha=1.0,
                 L=6.0,
             )
             if np.any(acceleration_prediction > a_ego_max):
