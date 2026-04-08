@@ -117,7 +117,7 @@ class sumo_sim():
         self.num_veh = num_vehicle
         self.sumo_veh = [None]*num_vehicle
         for i in range(self.num_veh):
-            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 30 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0, sumo_brake=False)
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 30 - 8 * i, init_lane=0, route_ID="route1", lane_change_mode=0, sumo_brake=False)
 
     def start_Sumo(self):
         sumoCmd = [self.sumoBinary, "-c", self.sumoconfig, "--quit-on-end", "--collision.action", "none"]
@@ -208,7 +208,7 @@ if __name__=="__main__":
     
     # Initialize controller
     dirname = os.path.dirname(__file__)
-    nn_pt_filename = dirname + '/traffic_following_control.pt'
+    nn_pt_filename = dirname + '/traffic_following_control_dc_trained.pt'
     preview_nn_pt_filename = os.path.abspath(
         os.path.join(
             parent_dir,
@@ -221,7 +221,7 @@ if __name__=="__main__":
     
     # Setup controller
     if USING_NEURAL_NETWORK:
-        FCN_control = NN_controller(nn_pt_file=nn_pt_filename, input_num=4)
+        FCN_control = NN_controller(nn_pt_file=nn_pt_filename, input_num=3)
         controller_name = 'Neural_Network'
         print('Use neural network to control traffic vehicles')
     elif USING_PREVIEW_NEURAL_NETWORK:
@@ -253,7 +253,7 @@ if __name__=="__main__":
     front_s_t = np.array(leading_vehicle_speed_profile[:, 3])
     
     traci.gui.trackVehicle("View #0", "veh1")
-    traci.gui.setZoom("View #0", 10000)
+    traci.gui.setZoom("View #0", 1000)
     
     Avg_spd_traffic = []
     Avg_density_traffic = []
@@ -288,6 +288,12 @@ if __name__=="__main__":
         
         s_at_traffic = []
         pv_at_traffic = []
+        preview_vehicle_indices = []
+        preview_ego_v_traffic = []
+        preview_ego_a_traffic = []
+        preview_ego_s_traffic = []
+        preview_pv_v_traffic = []
+        preview_pv_s_traffic = []
         preview_distance_headway_traffic = []
         preview_speed_gap_traffic = []
         start_t = time.time()
@@ -356,35 +362,14 @@ if __name__=="__main__":
                         use_current_ego_state=True,
                     )
                 )
+                preview_vehicle_indices.append(i)
+                preview_ego_v_traffic.append(veh_1_spd_t)
+                preview_ego_a_traffic.append(veh_1_acc_t)
+                preview_ego_s_traffic.append(veh_1_dist_t)
+                preview_pv_v_traffic.append(veh_0_spd_t)
+                preview_pv_s_traffic.append(veh_0_dist_t)
                 preview_distance_headway_traffic.append(distance_headway_preview)
                 preview_speed_gap_traffic.append(speed_gap_preview)
-
-                acc_prediction, trajectory_prediction = Preview_control.step_forward(
-                    ego_vt=np.array([veh_1_spd_t]),
-                    distance_headway_preview=np.array([distance_headway_preview]),
-                    speed_gap_preview=np.array([speed_gap_preview]),
-                    pv_vt=np.array([veh_0_spd_t]),
-                    pv_st=np.array([veh_0_dist_t]),
-                    s_st=np.array([veh_1_dist_t]),
-                    sim_t=sim_t,
-                    lambda_smooth=8.0,
-                    s_at=np.array([veh_1_acc_t]),
-                    use_cbf_safety=not args.disable_preview_cbf,
-                    return_trajectory=True,
-                )
-                acc = acc_prediction[0]
-                ego_preview_s, ego_preview_v = preview_trajectory_to_vehicle_preview(
-                    trajectory_prediction=trajectory_prediction[0],
-                )
-                sumo_sim_manager.sumo_veh[i].update_vehicle_future_states_preview(
-                    ego_preview_s,
-                    ego_preview_v,
-                    sim_step=sumo_sim_manager.step,
-                    preview_dt=PREVIEW_DT,
-                    source="preview_nn",
-                    is_relative=True,
-                )
-                sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc, v_max=30)
                 continue
             else:
                 acc_traffic_step_t = np.zeros(3)
@@ -393,7 +378,43 @@ if __name__=="__main__":
             
             # Assign the acceleration to ego vehicle
             sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc, v_max=30)
-        runtime_dt =  time.time() - t_start
+
+        if USING_PREVIEW_NEURAL_NETWORK and preview_vehicle_indices:
+            t_start = time.time()
+            acc_prediction, trajectory_prediction = Preview_control.step_forward(
+                ego_vt=np.asarray(preview_ego_v_traffic, dtype=float),
+                distance_headway_preview=np.asarray(preview_distance_headway_traffic, dtype=float),
+                speed_gap_preview=np.asarray(preview_speed_gap_traffic, dtype=float),
+                pv_vt=np.asarray(preview_pv_v_traffic, dtype=float),
+                pv_st=np.asarray(preview_pv_s_traffic, dtype=float),
+                s_st=np.asarray(preview_ego_s_traffic, dtype=float),
+                sim_t=sim_t,
+                lambda_smooth=1.0,
+                s_at=np.asarray(preview_ego_a_traffic, dtype=float),
+                use_cbf_safety=not args.disable_preview_cbf,
+                return_trajectory=True,
+            )
+
+            for batch_id, vehicle_index in enumerate(preview_vehicle_indices):
+                ego_preview_s, ego_preview_v = preview_trajectory_to_vehicle_preview(
+                    trajectory_prediction=trajectory_prediction[batch_id],
+                )
+                sumo_sim_manager.sumo_veh[vehicle_index].update_vehicle_future_states_preview(
+                    ego_preview_s,
+                    ego_preview_v,
+                    sim_step=sumo_sim_manager.step,
+                    preview_dt=PREVIEW_DT,
+                    source="preview_nn",
+                    is_relative=True,
+                )
+                sumo_sim_manager.sumo_veh[vehicle_index].assignTargetAcceleration(
+                    acc_prediction[batch_id],
+                    v_max=30,
+                )
+            runtime_dt =  time.time() - t_start
+        else:
+            runtime_dt =  time.time() - t_start
+
         print('MPC runtime is: ', str(round(runtime_dt * 1000, 3)), 'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
         
         if USING_NEURAL_NETWORK:
