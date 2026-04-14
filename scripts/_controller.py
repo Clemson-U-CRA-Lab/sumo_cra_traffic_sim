@@ -96,7 +96,7 @@ class PreviewModel(nn.Module):
         self.acceleration_out_features = acceleration_out_features
 
         self.conv1 = nn.Conv1d(
-            preview_channels, conv_channels, kernel_size=5, padding=1
+            preview_channels, conv_channels, kernel_size=9, padding=1
         )
         self.conv_activation = nn.ReLU()
         self.conv_pool = nn.AdaptiveAvgPool1d(8)
@@ -104,14 +104,10 @@ class PreviewModel(nn.Module):
         conv_output_features = conv_channels * 8
         self.fc1 = nn.Linear(conv_output_features + ego_features, h1)
         self.fc2 = nn.Linear(h1, h2)
-        self.trajectory_out = nn.Linear(h2, trajectory_out_features)
-        self.acceleration_fc1 = nn.Linear(
-            trajectory_out_features + ego_features, acceleration_h1
+        self.output = nn.Linear(
+            h2, trajectory_out_features + acceleration_out_features
         )
-        self.acceleration_fc2 = nn.Linear(acceleration_h1, acceleration_h2)
-        self.acceleration_out = nn.Linear(acceleration_h2, acceleration_out_features)
-        self.dp = nn.Dropout(0.2)
-        self.acceleration_activation = nn.ReLU()
+        self.dp = nn.Identity()
 
     def split_input_features(self, model_input):
         if model_input.shape[1] != self.ego_features + self.preview_steps * self.preview_channels:
@@ -140,18 +136,9 @@ class PreviewModel(nn.Module):
         x = self.dp(x)
         x = torch.sigmoid(self.fc2(x))
         x = self.dp(x)
-        trajectory_prediction = self.trajectory_out(x)
-
-        acceleration_head_input = torch.cat((trajectory_prediction, ego_v), dim=1)
-        acceleration_prediction = self.acceleration_activation(
-            self.acceleration_fc1(acceleration_head_input)
-        )
-        acceleration_prediction = self.dp(acceleration_prediction)
-        acceleration_prediction = self.acceleration_activation(
-            self.acceleration_fc2(acceleration_prediction)
-        )
-        acceleration_prediction = self.dp(acceleration_prediction)
-        acceleration_prediction = self.acceleration_out(acceleration_prediction)
+        joint_prediction = self.output(x)
+        trajectory_prediction = joint_prediction[:, : self.trajectory_out_features]
+        acceleration_prediction = joint_prediction[:, self.trajectory_out_features :]
         return trajectory_prediction, acceleration_prediction
 
 
@@ -162,7 +149,7 @@ class PreviewNN_controller():
         preview_steps=20,
         preview_channels=2,
         ego_features=1,
-        conv_channels=16,
+        conv_channels=32,
         h1=1024,
         h2=1024,
         trajectory_out_features=38,
@@ -194,7 +181,9 @@ class PreviewNN_controller():
             acceleration_out_features=acceleration_out_features,
         )
         self.nn_controller.eval()
-        self.nn_controller.load_state_dict(torch.load(nn_pt_file, map_location=self.device))
+        self.nn_controller.load_state_dict(
+            torch.load(nn_pt_file, map_location=self.device, weights_only=True)
+        )
         self.nn_controller.to(self.device)
 
     def CBF_acceleration_bound_check(self, pv_vt, s_vt, pv_st, s_st, tao, alpha, L):
