@@ -92,6 +92,8 @@ class PreviewModel(nn.Module):
         self.preview_steps = preview_steps
         self.preview_channels = preview_channels
         self.ego_features = ego_features
+        self.trajectory_out_features = trajectory_out_features
+        self.acceleration_out_features = acceleration_out_features
 
         self.conv1 = nn.Conv1d(
             preview_channels, conv_channels, kernel_size=5, padding=1
@@ -169,12 +171,14 @@ class PreviewNN_controller():
         acceleration_out_features=1,
         safe_distance_headway=8.0,
         enable_cbf_safety=True,
+        print_level="info",
     ):
         self.preview_steps = preview_steps
         self.preview_channels = preview_channels
         self.ego_features = ego_features
         self.safe_distance_headway = safe_distance_headway
         self.enable_cbf_safety = enable_cbf_safety
+        self.print_level = print_level
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.nn_controller = PreviewModel(
             in_features=ego_features + preview_steps * preview_channels,
@@ -285,7 +289,7 @@ class PreviewNN_controller():
                 L=6.0,
             )
             if np.any(acceleration_prediction > a_ego_max):
-                if sim_t is not None:
+                if sim_t is not None and self.print_level == "debug":
                     print(
                         f"CBF safety constraint is violated at time {sim_t}! Adjusting preview NN control to ensure safety..."
                     )
@@ -294,10 +298,136 @@ class PreviewNN_controller():
         if return_trajectory:
             return acceleration_prediction.tolist(), trajectory_prediction
         return acceleration_prediction.tolist()
+
+
+class TerminalPreviewFCNModel(nn.Module):
+    def __init__(
+        self,
+        in_features=3,
+        h1=1024,
+        h2=1024,
+        terminal_out_features=2,
+        acceleration_out_features=1,
+    ):
+        super().__init__()
+        self.fc1 = nn.Linear(in_features, h1)
+        self.fc2 = nn.Linear(h1, h2)
+        self.terminal_out = nn.Linear(h2, terminal_out_features)
+        self.acceleration_out = nn.Linear(h2, acceleration_out_features)
+        self.dp = nn.Identity()
+
+    def forward(self, x):
+        x = torch.sigmoid(self.fc1(x))
+        x = self.dp(x)
+        x = torch.sigmoid(self.fc2(x))
+        x = self.dp(x)
+        terminal_prediction = self.terminal_out(x)
+        acceleration_prediction = self.acceleration_out(x)
+        return terminal_prediction, acceleration_prediction
+
+
+class TerminalPreviewFCN_controller():
+    def __init__(
+        self,
+        nn_pt_file,
+        safe_distance_headway=8.0,
+        enable_cbf_safety=True,
+        print_level="info",
+    ):
+        self.safe_distance_headway = safe_distance_headway
+        self.enable_cbf_safety = enable_cbf_safety
+        self.print_level = print_level
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.nn_controller = TerminalPreviewFCNModel()
+        self.nn_controller.eval()
+        self.nn_controller.load_state_dict(torch.load(nn_pt_file, map_location=self.device))
+        self.nn_controller.to(self.device)
+
+    def CBF_acceleration_bound_check(self, pv_vt, s_vt, pv_st, s_st, tao, alpha, L):
+        a_ego_max = (pv_vt - s_vt + alpha * (pv_st - s_st - L - tao * s_vt)) / tao
+        return a_ego_max
+
+    def build_model_input(self, ego_vt, distance_headway_final, speed_gap_final):
+        ego_vt = np.asarray(ego_vt, dtype=np.float32).reshape(-1)
+        distance_headway_final = np.asarray(distance_headway_final, dtype=np.float32).reshape(-1)
+        speed_gap_final = np.asarray(speed_gap_final, dtype=np.float32).reshape(-1)
+
+        if ego_vt.shape[0] != distance_headway_final.shape[0] or ego_vt.shape[0] != speed_gap_final.shape[0]:
+            raise ValueError("Terminal FCN input batch sizes must match.")
+
+        model_input = np.column_stack(
+            (
+                ego_vt,
+                distance_headway_final - self.safe_distance_headway,
+                speed_gap_final,
+            )
+        ).astype(np.float32)
+        return torch.from_numpy(model_input).to(self.device)
+
+    def step_forward(
+        self,
+        ego_vt,
+        distance_headway_final,
+        speed_gap_final,
+        pv_vt=None,
+        pv_st=None,
+        s_st=None,
+        sim_t=None,
+        lambda_smooth=0.0,
+        s_at=None,
+        use_cbf_safety=None,
+        return_terminal=False,
+    ):
+        if use_cbf_safety is None:
+            use_cbf_safety = self.enable_cbf_safety
+
+        model_input = self.build_model_input(
+            ego_vt=ego_vt,
+            distance_headway_final=distance_headway_final,
+            speed_gap_final=speed_gap_final,
+        )
+
+        with torch.no_grad():
+            terminal_prediction, acceleration_prediction = self.nn_controller(model_input)
+
+        terminal_prediction = terminal_prediction.detach().cpu().numpy()
+        acceleration_prediction = acceleration_prediction.detach().cpu().numpy().flatten()
+
+        if s_at is not None and lambda_smooth > 0.0:
+            s_at = np.asarray(s_at, dtype=float).reshape(-1)
+            acceleration_prediction = (
+                acceleration_prediction + lambda_smooth * s_at
+            ) / (1.0 + lambda_smooth)
+
+        if use_cbf_safety:
+            if pv_vt is None or pv_st is None or s_st is None:
+                raise ValueError(
+                    "pv_vt, pv_st, and s_st are required when use_cbf_safety is enabled."
+                )
+            a_ego_max = self.CBF_acceleration_bound_check(
+                pv_vt=np.asarray(pv_vt, dtype=float).reshape(-1),
+                s_vt=np.asarray(ego_vt, dtype=float).reshape(-1),
+                pv_st=np.asarray(pv_st, dtype=float).reshape(-1),
+                s_st=np.asarray(s_st, dtype=float).reshape(-1),
+                tao=1.0,
+                alpha=1.0,
+                L=6.0,
+            )
+            if np.any(acceleration_prediction > a_ego_max):
+                if sim_t is not None and self.print_level == "debug":
+                    print(
+                        f"CBF safety constraint is violated at time {sim_t}! Adjusting terminal FCN control to ensure safety..."
+                    )
+                acceleration_prediction = np.minimum(acceleration_prediction, a_ego_max)
+
+        if return_terminal:
+            return acceleration_prediction.tolist(), terminal_prediction
+        return acceleration_prediction.tolist()
         
 class NN_controller():
-    def __init__(self, nn_pt_file, input_num):
+    def __init__(self, nn_pt_file, input_num, print_level="info"):
         self.num_input = input_num
+        self.print_level = print_level
         if input_num == 3:
             self.nn_controller = Model(h1=256, h2=256, h3=256, h4=256, h5=256)
         if input_num == 4:
@@ -342,7 +472,8 @@ class NN_controller():
         # Check if CBF safety constraint is violated
         a_ego_max = self.CBF_acceleration_bound_check(pv_vt=pv_vt, s_vt=s_vt, pv_st=pv_st, s_st=s_st, tao=1.5, alpha=2.0, L=7.0)
         if np.any(s_a_nn > a_ego_max):
-            print(f"CBF safety constraint is violated at time {sim_t}! Adjusting NN control to ensure safety...")
+            if self.print_level == "debug":
+                print(f"CBF safety constraint is violated at time {sim_t}! Adjusting NN control to ensure safety...")
             ego_a_tgt = np.minimum(s_a_nn, a_ego_max)
         else:
             ego_a_tgt = s_a_nn
