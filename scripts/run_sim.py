@@ -126,7 +126,7 @@ class sumo_sim():
         self.num_veh = num_vehicle
         self.sumo_veh = [None]*num_vehicle
         for i in range(int(self.num_veh)):
-            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 1500 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0, sumo_brake=False)
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 200 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0, sumo_brake=False)
         # for j in range(int(self.num_veh / 2), self.num_veh):
         #     self.sumo_veh[j] = SUMO_vehicles(vehicle_ID="veh" + str(j), init_s= 350 - 12 * (j - int(num_veh/2)), init_lane=1, route_ID="route1", lane_change_mode=0)
     
@@ -332,7 +332,7 @@ if __name__=="__main__":
             vehicle_index=args.preview_vehicle_index,
         )
     
-    while sumo_sim_manager.step * 0.1 < record_t[-1] + 30:
+    while sumo_sim_manager.step * 0.1 < 60: #record_t[-1] + 30:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         runtime_dt = 0.0

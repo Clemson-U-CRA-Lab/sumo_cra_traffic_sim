@@ -273,9 +273,9 @@ class PreviewNN_controller():
                 s_vt=np.asarray(ego_vt, dtype=float).reshape(-1),
                 pv_st=np.asarray(pv_st, dtype=float).reshape(-1),
                 s_st=np.asarray(s_st, dtype=float).reshape(-1),
-                tao=1.0,
-                alpha=1.0,
-                L=6.0,
+                tao=0.8,
+                alpha=2.0,
+                L=5.0,
             )
             if np.any(acceleration_prediction > a_ego_max):
                 if sim_t is not None and self.print_level == "debug":
@@ -398,9 +398,9 @@ class TerminalPreviewFCN_controller():
                 s_vt=np.asarray(ego_vt, dtype=float).reshape(-1),
                 pv_st=np.asarray(pv_st, dtype=float).reshape(-1),
                 s_st=np.asarray(s_st, dtype=float).reshape(-1),
-                tao=1.0,
-                alpha=1.0,
-                L=6.0,
+                tao=0.8,
+                alpha=2.0,
+                L=5.0,
             )
             if np.any(acceleration_prediction > a_ego_max):
                 if sim_t is not None and self.print_level == "debug":
