@@ -18,7 +18,7 @@ import struct
 from x2v_constants import *
 import threading
 
-class x2vSocketInterfaceAsync:
+class x2vSocketInterfaceUdpAsync:
     '''
     x2vSocketInterfaceAsync class helps setup a socket connection that doesnt keep the whole code waiting to recv info.
     This runs a recv fom socket function on separate thread and just updates the 'self.latest_veh_data' attribute when it received new info.

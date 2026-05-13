@@ -21,7 +21,7 @@ if _comms_type == "TCP":
 
     # TCP Socket Setup
     TIMEOUT = 5  # Timeout
-    INTERFACE_SCOPE_ID = 16 # for ipv6 
+    INTERFACE_SCOPE_ID = 16 # for ipv6 - update evey time you connect the cable.
 
 elif _comms_type == "UDP":
     # udp
@@ -56,11 +56,11 @@ else:
 
 
 # indoor or outdoor VIL?:
-BOOL_TEST_WITHOUT_GPS = True
+BOOL_TEST_WITHOUT_GPS = False
 
 # SUMO params and run params
 SIM_STEP = 0.1
-END_TIME = 695.0 #90
+END_TIME = 50.0 #90
 SUMO_ACC_INTEGRATE_DT = 3.0 # for traci.setAcceleration() in sumo
 SUMO_CONFIG = "v2x_2veh.sumocfg" # which config to use
 
@@ -91,12 +91,12 @@ STALLTIME = 31.0
 STALLENDTIME = STALLTIME + 5.0
 
 # Attack details
-BOOL_ATTACK = False
+BOOL_ATTACK = True
 ATTACK_TYPE = "SPOOF_ENERGENCY" # "REPLAY", "CUTOFF", "SPOOF_EMERGENCY"
 ATTACK_START_TIME = 31.0 # seconds into the sim when attack starts
 ATTACK_END_TIME = ATTACK_START_TIME + 15.0
 ATTACK_ACTIVE = False
 
 # ATTACK_INTENSITY = 30 # how old a frame: - 
-# 30@10hz, 15@10hz, 5@10hz, 3@10hz, 30@100hz
+# 30@10hz, 15@10hz, 5@10hz, 3@10hz, 30@100hz (for ITS paper, v4.py)
 DELAY_SECONDS = 4.0 # for tcp only

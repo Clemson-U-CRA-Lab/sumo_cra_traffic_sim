@@ -29,7 +29,7 @@ if logRunning_:
 guiSumo = True
 vizTraj = False
 testWithoutGPS = BOOL_TEST_WITHOUT_GPS
-verbosity = True
+verbosity = False
 
 
 # UDP socket interface
@@ -189,7 +189,7 @@ if __name__=="__main__":
                 spoof_offset = 3.5
                 sim_nv_array = [sim_time, 
                                 veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
-                                veh_states_matrix[0][3] + spoof_offset, 0.0, 0.0  # front: spoof stop
+                                veh_states_matrix[0][3] + spoof_offset, 0.0, -3.0  # front: spoof stop
                                 ] + [veh_states_matrix[0][3]]*REF_CYCLE_STAGES + [0.0]*REF_CYCLE_STAGES # front's s, front's v
             else:
                 raise ValueError("Invalid ATTACK_TYPE. Choose 'REPLAY' or 'CUTOFF'.")
