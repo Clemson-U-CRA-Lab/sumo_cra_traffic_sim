@@ -2,7 +2,7 @@
 # COMMUNICATIONS SETUP
 ####################################
 _comms_type = "UDP" # "TCP" or "UDP"
-_test_type = "DIRECT" # "SAME MACHINE" or "DIRECT", "VIACOHDA"
+_test_type = "VIACOHDA" # "SAME MACHINE" or "DIRECT", "VIACOHDA"
 
 if _comms_type == "TCP":
     if _test_type == "SAMEMACHINE":
@@ -27,9 +27,10 @@ elif _comms_type == "UDP":
     # udp
     if _test_type == "SAMEMACHINE":
         # same machine testing only
-        # TODO VERIFY yet to test udp on same machine
-        RSPC_IPV4 = 'localhost'
-        RSU_IPV4 = 'localhost'
+        RSPC_IPV4 = '192.168.74.170'
+        TARGET_IP = '192.168.74.170'
+        RX_UDP_PORT = 9101 # RSPC recvs from MAHCE on this.
+        TX_UDP_PORT = 9102 # RSPC sends to this on mache.
     elif _test_type == "DIRECT":
         RSPC_IPV4 = '192.168.74.170'
         MACHEPC_IPV4 = '192.168.74.169'
@@ -56,11 +57,11 @@ else:
 
 
 # indoor or outdoor VIL?:
-BOOL_TEST_WITHOUT_GPS = False
+BOOL_TEST_WITHOUT_GPS = True
 
 # SUMO params and run params
 SIM_STEP = 0.1
-END_TIME = 50.0 #90
+END_TIME = 80.0 #90
 SUMO_ACC_INTEGRATE_DT = 3.0 # for traci.setAcceleration() in sumo
 SUMO_CONFIG = "v2x_2veh.sumocfg" # which config to use
 
@@ -91,7 +92,7 @@ STALLTIME = 31.0
 STALLENDTIME = STALLTIME + 5.0
 
 # Attack details
-BOOL_ATTACK = True
+BOOL_ATTACK = False
 ATTACK_TYPE = "SPOOF_ENERGENCY" # "REPLAY", "CUTOFF", "SPOOF_EMERGENCY"
 ATTACK_START_TIME = 31.0 # seconds into the sim when attack starts
 ATTACK_END_TIME = ATTACK_START_TIME + 15.0

@@ -272,6 +272,8 @@ if __name__=="__main__":
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
+        if veh_states_matrix[1][3] >= 200:
+            break
 
 
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
@@ -287,7 +289,8 @@ if __name__=="__main__":
     plt.plot(record_t, front_s_t, 'r:') 
     plt.plot(veh_sim_t, veh_0_dist,'k--')
     plt.plot(veh_sim_t, veh_1_dist,'b--')
-    plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
+    if BOOL_ATTACK:
+        plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
     # plt.plot(veh_sim_t, veh_3_dist)
     plt.xlabel('Time [s]')
     plt.ylabel('Distance from route edge [m]')
@@ -297,7 +300,8 @@ if __name__=="__main__":
     plt.plot(record_t, front_v_t, 'r:') 
     plt.plot(veh_sim_t, veh_0_spd, 'k--')
     plt.plot(veh_sim_t, veh_1_spd, 'b--')
-    plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
+    if BOOL_ATTACK:
+        plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
     # plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Speed [m/s]')
@@ -307,7 +311,8 @@ if __name__=="__main__":
     plt.plot(veh_sim_t, veh_0_acc, 'k--')
     plt.plot(veh_sim_t, veh_1_acc,'b--')
     plt.plot(veh_sim_t, mache_accCmd, 'g--')
-    plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
+    if BOOL_ATTACK:
+        plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
     # plt.plot(veh_sim_t, veh_3_spd)
     plt.xlabel('Time [s]')
     plt.ylabel('Acc [m/s^2]')
@@ -316,7 +321,8 @@ if __name__=="__main__":
     plt.subplot(5,1,4)
     plt.plot(veh_sim_t, gap_hist, 'm--')
     plt.plot(veh_sim_t, headway_hist, 'c--')
-    plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
+    if BOOL_ATTACK:
+        plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
     plt.xlabel('Time [s]')
     plt.ylabel('Gap/Headway')
     plt.ylim(0, 40)
@@ -324,7 +330,8 @@ if __name__=="__main__":
 
     plt.subplot(5,1,5)
     plt.plot(veh_sim_t, ttc_hist, 'r--')
-    plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
+    if BOOL_ATTACK:
+        plt.axvspan(ATTACK_START_TIME, ATTACK_END_TIME, color='red', alpha=0.12)
     plt.ylim(0, 30)
     plt.xlabel('Time [s]')
     plt.ylabel('TTC [s]')
