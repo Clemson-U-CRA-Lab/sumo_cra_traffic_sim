@@ -8,9 +8,13 @@ import matplotlib.pyplot as plt
 from utils import *
 from _controller import *
 from _network_message_logger import NetworkMessageLogger
-from _network_degradation import NetworkDegradationLayer  # import logger from model simulation (Soumil)
+from _network_degradation import NetworkDegradationLayer
+from _network_trace_replay import NetworkTraceReplayLayer  # import logger from model simulation (Soumil)
+from _network_plotting import generate_all_diagnostics
 from _constants import *
 import time
+import argparse
+import atexit
 
 from collections import deque
 
@@ -25,6 +29,16 @@ logRunning_ = False
 fileNameTemp = 'sumoSim_v2x_logRuntime' + datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.csv'
 data = np.zeros([int(END_TIME / SIM_STEP) + 1, len(csv_header)])
 
+def safe_traci_close():
+    try:
+        if traci.isLoaded():
+            traci.close(False)
+    except Exception:
+        pass
+
+
+atexit.register(safe_traci_close)
+
 # Run params
 vizTraj = False
 guiSumo = True
@@ -33,29 +47,178 @@ live_plt = False
 # =========================
 # DoS-as-latency on lead info (nv0 -> nv1)
 # =========================
-BOOL_ATTACK_LEAD_INFO = True
+BOOL_ATTACK_LEAD_INFO = False
 ATTACK_START_TIME = STALLTIME
 LEAD_INFO_DELAY = 3
 lead_state_buffer = deque()
 
 # =========================
-# Network degradation layer settings
+# Network degradation scenario presets
 # =========================
-ENABLE_NETWORK_DEGRADATION = False
+# attack_start_offset is relative to STALLTIME.
+# attack_duration is in simulation seconds.
+NETWORK_SCENARIO_PRESETS = {
+    "baseline": {
+        "enabled": False,
+        "attack_start_offset": 0.0,
+        "attack_duration": 0.0,
+        "base_delay_seconds": 0.0,
+        "attack_delay_seconds": 0.0,
+        "attack_jitter_seconds": 0.0,
+        "attack_drop_probability": 0.0,
+    },
+    "delay_only": {
+        "enabled": True,
+        "attack_start_offset": 0.0,
+        "attack_duration": 5.0,
+        "base_delay_seconds": 0.0,
+        "attack_delay_seconds": 1.0,
+        "attack_jitter_seconds": 0.2,
+        "attack_drop_probability": 0.0,
+    },
+    "delay_drop": {
+        "enabled": True,
+        "attack_start_offset": 0.0,
+        "attack_duration": 5.0,
+        "base_delay_seconds": 0.0,
+        "attack_delay_seconds": 1.0,
+        "attack_jitter_seconds": 0.2,
+        "attack_drop_probability": 0.2,
+    },
+    "pre_stall_severe": {
+        "enabled": True,
+        "attack_start_offset": -3.0,
+        "attack_duration": 11.0,
+        "base_delay_seconds": 0.0,
+        "attack_delay_seconds": 2.0,
+        "attack_jitter_seconds": 0.5,
+        "attack_drop_probability": 0.4,
+    },
+    "severe_delay_drop": {
+        "enabled": True,
+        "attack_start_offset": -3.0,
+        "attack_duration": 12.0,
+        "base_delay_seconds": 0.0,
+        "attack_delay_seconds": 3.0,
+        "attack_jitter_seconds": 0.75,
+        "attack_drop_probability": 0.5,
+    },
+    "extended_attack": {
+        "enabled": True,
+        "attack_start_offset": -5.0,
+        "attack_duration": 20.0,
+        "base_delay_seconds": 0.0,
+        "attack_delay_seconds": 2.0,
+        "attack_jitter_seconds": 0.5,
+        "attack_drop_probability": 0.3,
+    },
+    "high_jitter": {
+        "enabled": True,
+        "attack_start_offset": -3.0,
+        "attack_duration": 12.0,
+        "base_delay_seconds": 0.0,
+        "attack_delay_seconds": 1.0,
+        "attack_jitter_seconds": 1.0,
+        "attack_drop_probability": 0.1,
+    },
+    "blackout": {
+        "enabled": True,
+        "attack_start_offset": -1.0,
+        "attack_duration": 6.0,
+        "base_delay_seconds": 0.0,
+        "attack_delay_seconds": 0.0,
+        "attack_jitter_seconds": 0.0,
+        "attack_drop_probability": 1.0,
+    },
+}
 
-# Attack window for degrading nv0 -> nv1 messages
-NETWORK_ATTACK_START = STALLTIME
-NETWORK_ATTACK_END = STALLTIME + 5.0
 
-# These are model knobs we will tune later
-NETWORK_BASE_DELAY_SECONDS = 0.0
-NETWORK_ATTACK_DELAY_SECONDS = 1.0
-NETWORK_ATTACK_JITTER_SECONDS = 0.2
-NETWORK_ATTACK_DROP_PROBABILITY = 0.2
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run SUMO CAV simulation with a selected V2X network degradation scenario."
+    )
+    parser.add_argument(
+        "--network-scenario",
+        choices=sorted(NETWORK_SCENARIO_PRESETS.keys()),
+        default="delay_drop",
+        help="Named network degradation scenario to run.",
+    )
+
+    parser.add_argument(
+        "--network-trace-file",
+        default=None,
+        help="Replay packet delivery from a network simulator trace CSV instead of manual degradation.",
+    )
+
+    parser.add_argument(
+        "--network-trace-name",
+        default="simu5g_trace",
+        help="Results folder name for trace-based network replay runs.",
+    )
+    parser.add_argument(
+        "--no-gui",
+        action="store_true",
+        help="Run SUMO without GUI for batch scenario testing.",
+    )
+    parser.add_argument(
+        "--keep-gui-open",
+        action="store_true",
+        help="Keep SUMO GUI open after the simulation until Enter is pressed.",
+    )
+    parser.add_argument(
+        "--no-network-plots",
+        action="store_true",
+        help="Skip automatic generation of network/controller diagnostic plots.",
+    )
+    return parser.parse_args()
+
+
+def resolve_network_scenario(scenario_name):
+    scenario = dict(NETWORK_SCENARIO_PRESETS[scenario_name])
+
+    attack_start = max(0.0, STALLTIME + scenario["attack_start_offset"])
+    attack_end = attack_start + scenario["attack_duration"]
+
+    scenario["attack_start"] = attack_start
+    scenario["attack_end"] = attack_end
+
+    return scenario
 
 
 
 if __name__ == "__main__":
+
+    args = parse_args()
+
+    if args.no_gui:
+        guiSumo = False
+
+    scenario_name = args.network_scenario
+    network_scenario = resolve_network_scenario(scenario_name)
+    if args.network_trace_file:
+        scenario_name = args.network_trace_name
+
+    ENABLE_NETWORK_DEGRADATION = network_scenario["enabled"]
+    NETWORK_ATTACK_START = network_scenario["attack_start"]
+    NETWORK_ATTACK_END = network_scenario["attack_end"]
+    NETWORK_BASE_DELAY_SECONDS = network_scenario["base_delay_seconds"]
+    NETWORK_ATTACK_DELAY_SECONDS = network_scenario["attack_delay_seconds"]
+    NETWORK_ATTACK_JITTER_SECONDS = network_scenario["attack_jitter_seconds"]
+    NETWORK_ATTACK_DROP_PROBABILITY = network_scenario["attack_drop_probability"]
+
+    results_dir = os.path.join("networksim", "results", scenario_name)
+    os.makedirs(results_dir, exist_ok=True)
+
+    print("=" * 70)
+    print(f"Running network scenario: {scenario_name}")
+    print(f"Network degradation enabled: {ENABLE_NETWORK_DEGRADATION}")
+    print(f"Attack window: {NETWORK_ATTACK_START:.2f}s to {NETWORK_ATTACK_END:.2f}s")
+    print(f"Base delay: {NETWORK_BASE_DELAY_SECONDS:.2f}s")
+    print(f"Attack delay: {NETWORK_ATTACK_DELAY_SECONDS:.2f}s")
+    print(f"Attack jitter: ±{NETWORK_ATTACK_JITTER_SECONDS:.2f}s")
+    print(f"Attack drop probability: {NETWORK_ATTACK_DROP_PROBABILITY:.2f}")
+    print(f"Results directory: {results_dir}")
+    print("=" * 70)
 
     veh_0_dist = []
     veh_0_spd = []
@@ -133,20 +296,28 @@ if __name__ == "__main__":
     # Network coupling baseline:
     # Logs clean SUMO vehicle states as network-style messages.
     network_logger = NetworkMessageLogger(
-        "networksim/results/sumo_message_schedule.csv"
+        os.path.join(results_dir, "sumo_message_schedule.csv")
     )
 
-    network_layer = NetworkDegradationLayer(
-        enabled=ENABLE_NETWORK_DEGRADATION,
-        attack_start=NETWORK_ATTACK_START,
-        attack_end=NETWORK_ATTACK_END,
-        base_delay_seconds=NETWORK_BASE_DELAY_SECONDS,
-        attack_delay_seconds=NETWORK_ATTACK_DELAY_SECONDS,
-        attack_jitter_seconds=NETWORK_ATTACK_JITTER_SECONDS,
-        attack_drop_probability=NETWORK_ATTACK_DROP_PROBABILITY,
-        trace_path="networksim/results/network_degradation_trace.csv",
-        seed=1,
-    )
+    if args.network_trace_file:
+        print(f"Using network trace replay from: {args.network_trace_file}")
+        network_layer = NetworkTraceReplayLayer(
+            trace_file=args.network_trace_file,
+            trace_path=os.path.join(results_dir, "network_degradation_trace.csv"),
+            fallback="deliver_immediate",
+        )
+    else:
+        network_layer = NetworkDegradationLayer(
+            enabled=ENABLE_NETWORK_DEGRADATION,
+            attack_start=NETWORK_ATTACK_START,
+            attack_end=NETWORK_ATTACK_END,
+            base_delay_seconds=NETWORK_BASE_DELAY_SECONDS,
+            attack_delay_seconds=NETWORK_ATTACK_DELAY_SECONDS,
+            attack_jitter_seconds=NETWORK_ATTACK_JITTER_SECONDS,
+            attack_drop_probability=NETWORK_ATTACK_DROP_PROBABILITY,
+            trace_path=os.path.join(results_dir, "network_degradation_trace.csv"),
+            seed=1,
+        )
 
     latest_network_nv0_state = None
     network_msg_id = 0
@@ -240,7 +411,7 @@ if __name__ == "__main__":
 
         # Replace the clean nv0 state with the latest network-delivered nv0 state.
         # If messages are delayed or dropped, this causes nv1's controller to use stale nv0 data.
-        if ENABLE_NETWORK_DEGRADATION and latest_network_nv0_state is not None and "nv0" in state_by_id:
+        if (args.network_trace_file or ENABLE_NETWORK_DEGRADATION) and latest_network_nv0_state is not None and "nv0" in state_by_id:
             state_by_id["nv0"] = list(latest_network_nv0_state)
             veh_states_matrix = [state_by_id[veh] for veh in vehicle_list]
 
@@ -365,7 +536,17 @@ if __name__ == "__main__":
         plt.ioff()
 
     print('Average runtime is: ', str(round(np.mean(runtime_record) * 1000, 4)), 'ms')
-    save_csv_sumo(data, file_prefix='sumoSim_log', csv_header=csv_header)
+    # Save controller/SUMO trajectory log directly into scenario results folder.
+    # Avoid save_csv_sumo here because it expects a simple prefix, not a nested path.
+    controller_log_path = os.path.join(results_dir, "sumo_controller_log.csv")
+    np.savetxt(
+        controller_log_path,
+        data,
+        delimiter=",",
+        header=",".join(csv_header),
+        comments=""
+    )
+    print(f"Saved controller log to: {controller_log_path}")
 
     plt.figure(2)
 
@@ -393,8 +574,21 @@ if __name__ == "__main__":
     plt.ylabel('Acc [m/s^2]')
     plt.legend(['Leading Vehicle', 'mache', 'mache_accCmd'])
 
-    plt.savefig('sumoSim_' + datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.png')
-
+    plt.savefig(os.path.join(results_dir, 'sumoSim_' + scenario_name + '_' + datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p") + '.png'))
+    #plt.savefig(os.path.join(results_dir, "sumo_sim_overview.png"), dpi=180)
+    
     plt.close('all')  # avoid blocking terminal after saving plot
 
-    traci.close(False)
+    if not args.no_network_plots:
+        generate_all_diagnostics(
+            results_dir=results_dir,
+            scenario_name=scenario_name,
+            attack_start=NETWORK_ATTACK_START,
+            attack_end=NETWORK_ATTACK_END,
+        )
+
+
+    if guiSumo and args.keep_gui_open:
+        input("Simulation complete. Press Enter to close SUMO GUI...")
+
+    safe_traci_close()

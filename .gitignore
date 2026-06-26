@@ -1,2 +1,22 @@
-scripts/__pycache__/
-data/**/*.bag
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# SUMO / Simu5G generated outputs
+networksim/results/
+networksim/simu5g_trace_model/output/
+
+# OMNeT++ generated files
+*.vec
+*.sca
+*.vci
+*.elog
+*.anf
+*.out
+
+# Logs / temp
+*.log
+*.tmp
+.DS_Store
