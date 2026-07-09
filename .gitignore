@@ -20,3 +20,8 @@ networksim/simu5g_trace_model/output/
 *.log
 *.tmp
 .DS_Store
+networksim/veins_live_model/simulations/v2x_controller_live/*.csv
+networksim/veins_live_model/simulations/v2x_controller_live/*.png
+networksim/veins_live_model/simulations/v2x_controller_live/sweep_results/
+networksim/veins_live_model/simulations/v2x_controller_live/results/
+networksim/veins_live_model/simulations/v2x_controller_live/generated/live_generated.ini

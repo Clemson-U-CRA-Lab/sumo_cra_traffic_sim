@@ -1,0 +1,31 @@
+scenario:
+  name: dos_fake_agents
+  sim_time_limit: 80s
+
+v2x_status:
+  destination: "car[1]"
+  port: 4000
+  send_interval: 0.1s
+  start_time: 0.5s
+  packet_size_bytes: 72
+
+dos_attack:
+  enabled: true
+  fake_agent_count: 800
+  attack_start: 5s
+  attack_stop: 30s
+  packet_size_bytes: 72
+  packets_per_agent_per_second: 10
+  destination: "car[1]"
+  destination_port: 4500
+  impersonate_vehicle_id: "nv0"
+
+simu5g:
+  amc_mode: "D2D"
+  d2d_initial_mode: true
+  enable_d2d_cqi_reporting: true
+  use_preconfigured_tx_params: false
+
+outputs:
+  status_packet_log: "v2x_simu5g_delivered_packets.csv"
+  dos_packet_log: "v2x_dos_packets.csv"
