@@ -18,10 +18,11 @@ Scripts:
     sumoOnly_v3_3veh - has no tcp, purely sumo, no0,nv1,nv2
     sumoOnly_v3_nVeh - take snumber of cvehicles from sumo vehicle list, basedd on .cfg file `SUMO_CONFIG`
 
-5. sumo2V_v4_nv1.py - 
+5. sumo2V_v4_nv1.py - tcp based dos experiments for lcss
 
 6. sumo2V_v5_nv1.py - with UDP
-    sumo2V_v5_nv1_demo - with UDP interface, with attack emulation.
+    - sumo2V_v5_nv1_demo - with UDP interface, with attack emulation.
+    - compatible to run with acme UDP comms flow. (see details of what files to run on all devies in cv2x/readme.md)
 
 
 TODO:
