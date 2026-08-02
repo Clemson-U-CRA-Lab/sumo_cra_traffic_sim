@@ -36,7 +36,7 @@ verbosity = False
 
 if asyncSocket:
     if interface == 'periodicInterface':
-        from x2vSocketInterface_Udp_periodic import x2vSocketInterfaceAsync as x2vSocketInterface
+        from x2vSocketInterface_Udp_periodic import x2vSocketInterfaceUdpAsync as x2vSocketInterface
     else:
         raise ValueError("Invalid interface type. Choose 'periodicInterface', 'latency', or 'naiveAsync'.")
 else:
@@ -279,6 +279,10 @@ if __name__=="__main__":
             sleep_time = next_deadline - time.monotonic()
             if sleep_time > 0:
                 time.sleep(sleep_time)
+
+        # kill cleanly if vehicles out of the road.
+        if veh_1_dist[-1] >= 210:
+            break
 
 
 

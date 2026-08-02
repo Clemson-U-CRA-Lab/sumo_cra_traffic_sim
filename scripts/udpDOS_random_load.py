@@ -45,11 +45,11 @@ def parse_args():
                         help=f"destination UDP port(s), clients are split round-robin (default: {DEFAULT_TARGET_PORT})")
     parser.add_argument("--bind-ip", default=DEFAULT_BIND_IP,
                         help=f"local source IP to bind, empty string means OS default (default: {DEFAULT_BIND_IP!r})")
-    parser.add_argument("--clients", type=int, default=30,
+    parser.add_argument("--clients", type=int, default=15,
                         help="number of UDP client threads/sockets")
     parser.add_argument("--packet-bytes", type=int, default=DEFAULT_PACKET_BYTES,
                         help=f"fixed UDP payload size in bytes (default: {DEFAULT_PACKET_BYTES}, matching SIM_ARRAY_SIZE)")
-    parser.add_argument("--pps", type=float, default=100.0,
+    parser.add_argument("--pps", type=float, default=10.0,
                         help="packets per second per client; use 0 for best-effort flood")
     parser.add_argument("--duration", type=float, default=80.0,
                         help="seconds to run; use <=0 to run until Ctrl-C")

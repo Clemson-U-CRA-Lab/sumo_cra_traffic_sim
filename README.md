@@ -25,27 +25,3 @@ Scripts:
     - compatible to run with acme UDP comms flow. (see details of what files to run on all devies in cv2x/readme.md)
 
 
-TODO:
-1. Pred, preview with new (eraleir it wasnt updating speed mode) chcks off.
-2. 2 vehicle, 
-3. 3 vehicle config - the mpc ref of 0.5 when passed t 3rd vehicle, does poorly. but if i pass in 0.1 dt, then its fine..
-4. with stall, without stall
-5. with attack - 3 intensities.
-
-6. Preview tcp msg segmentation.delay with 100 length. - 
-    - v2x rev loop - 
-    - x2v recv loop - 
-    - sendall()
-    - sumo pace timer - sending truly periodic
-    - v2x send in main loop instead of allback - will miss messages but will not see bursts. (OR is this desirable for my results?)
-    - then test with atacks. and pcaps
-
-
-    - threaded sends / recv are too good.. 
-
-    - maybe just switch back to original interface and test on bench with 32*0.2 preview.
-    - 
-
-    - Try UDP
-    - Try cv2x
-
