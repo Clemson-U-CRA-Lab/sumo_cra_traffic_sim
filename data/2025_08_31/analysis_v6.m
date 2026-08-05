@@ -1,18 +1,15 @@
-% FOR TVT DOS paper recvvsion
+% FOR TVT DOS paper recvvsion R1
 
 clc;
 close all;
 clear all;
 
-close all;
-clear all;
 
 FIGPOS_1plot = [300,400,550,280];
 FIGPOS_1plot_wide = [300,400,550,280];
-FIGPOS1_2plots = [300,400,550,350];
+FIGPOS1_2plots = [300,400,550,450];
 FIGPOS2_4plots = [500,200,550,730];
 FIGPOS3 = [500,200,550,400];
-FIGPOS4_3plots = [500,200,550,600];
 FIGPOS4_3plots = [500,200,550,650];
 fontSize = 12;
 fontSize_subtiles = 12;
@@ -190,6 +187,45 @@ linkaxes([ax2, ax1, ax3],'x')
 set(gcf,'position',FIGPOS4_3plots)
 set ( gcf, 'Color', 'white')
 
+%%
+f2 = figure('DefaultAxesFontsize', fontSize);
+t2 = tiledlayout(2,1, "TileSpacing","tight","Padding","tight");
+
+percent_change_spd1 = max(0.01, percent_change_spd);
+nexttile
+% yline(10,"-","LineWidth",1.5,"Color",'k')
+hold on
+plot(percent_change_spd1, '-o', 'LineWidth', 2);
+set(gca, 'YScale', 'log');
+set(gca, 'XTickLabel', groupNames, 'XTick', 1:numel(groupNames), 'XTickLabelRotation', 45);
+ylabel(" % \delta v");
+title('Percent Change in RMS Speed Error', 'FontSize', fontSize_subtiles, 'FontWeight', 'bold');
+hold off
+grid on;
+box on
+ylim([0, 200]);
+yticks([0, 1, 25, 200])
+
+ax1 = gca;
+
+nexttile
+plot(min_dist_gap_grouped, '-o', 'LineWidth', 2);
+set(gca, 'XTickLabel', groupNames, 'XTick', 1:numel(groupNames), 'XTickLabelRotation', 45);
+hold on;
+yline(0, "LineWidth",1, "LineStyle","--","Color","k")
+% set(gca, 'XTickLabel', groupNames, 'XTick', 1:numel(groupNames), 'XTickLabelRotation', 45);
+ylabel('Lowest gap [m]');
+title('Lowest Gap observed', 'FontSize', fontSize_subtiles, 'FontWeight', 'bold');
+grid on;
+box on
+ax2 = gca;
+
+
+legend(legendGroup,'Location','southoutside', Orientation='horizontal');
+
+linkaxes([ax2, ax1],'x')
+set(gcf,'position',FIGPOS1_2plots)
+set ( gcf, 'Color', 'white')
 
 %%
 
@@ -234,8 +270,9 @@ set(f3,'position',FIGPOS_1plot)
 
 
 %% SAVE
-saveas(f1,'performance.png')
-saveas(f3,'cycle_v2.png')
+saveas(f1,'r1_performance.png')
+saveas(f2,'r1_performance2.png')
+saveas(f3,'r1_cycle_v2.png')
 
 
 
