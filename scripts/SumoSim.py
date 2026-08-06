@@ -31,7 +31,7 @@ class SumoSim():
         
     def start_Sumo(self, gui=True):
         if gui:
-            sumoCmd = [self.sumoBinary, "-c", self.sumoconfig, "--quit-on-end"]
+            sumoCmd = [self.sumoBinary, "-c", self.sumoconfig, "--quit-on-end", "--window-size", "600,600"]
         else:
             sumoCmd = [self.sumoBinaryNoGUI, "-c", self.sumoconfig]
         traci.start(sumoCmd)
@@ -115,11 +115,20 @@ class SumoSim():
         self.step += 1
 
 
+    def _resolve_traj_edge_lane(self, vehID, edgeID=None, laneId=None):
+        """Use the vehicle's current road/lane so both route directions work."""
+        if edgeID is None:
+            edgeID = traci.vehicle.getRoadID(vehID)
+        if laneId is None:
+            laneId = traci.vehicle.getLaneIndex(vehID)
+        return edgeID, laneId
+
     def add_traj(self, vehID, 
                  preds_s, 
-                 edgeID="76146229#1", laneId=0, 
+                 edgeID=None, laneId=None, 
                  colorChoice=(255,0,0,100), 
                  fill=False, layer=2):
+        edgeID, laneId = self._resolve_traj_edge_lane(vehID, edgeID, laneId)
         pred_traj = []
         for s in preds_s:
             try:
@@ -152,8 +161,9 @@ class SumoSim():
                         leader_s, record_t, front_v_t, 
                         sim_t, 
                         pred_dt=MPC_DT, mpc_ref_stages=MPC_REF_STAGES,
-                        edgeID="76146229#1", 
-                        laneId=0, colorChoice=(255,0,0,100), fill=False, layer=2):
+                        edgeID=None, 
+                        laneId=None, colorChoice=(255,0,0,100), fill=False, layer=2):
+        edgeID, laneId = self._resolve_traj_edge_lane(vehID, edgeID, laneId)
         
         cycle_vs = np.empty(mpc_ref_stages)
         cycle_vs.fill(np.nan)

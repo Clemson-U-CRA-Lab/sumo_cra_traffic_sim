@@ -1,0 +1,35 @@
+
+#####################################
+# RUN SETUP for running multiple runs in a batch.
+#####################################
+
+
+# SUMO params and run params
+END_TIME : 90.0 #90
+# SUMO_CONFIG lives only in x2v_constants.py
+
+# Attack details
+BOOL_ATTACK : True
+ATTACK_START_TIME : 10.0 # seconds into the sim when attack starts
+ATTACK_ACTIVE : False
+
+# manual delay level:
+DELAY_SECONDS : 0.1 # for tcp , and now udp_sendDelay interface too.
+
+
+
+runs:
+    - run0: 0.0/10
+    - run1: 0.1/10
+    - run2: 0.2/10
+    - run3: 0.5/10
+    - run4: 0.75/10
+    - run5: 1.0/10
+    - run6: 1.5/10
+    - run7: 2.0/10
+    - run8: 0.5/20
+    - run9: 1.0/20
+    - run10: 1.5/20
+    - run11: 2.0/20
+    - run12: 2.0/19
+    - run13: 2.0/22

@@ -1,4 +1,4 @@
-% FOR TVT DOS paper recvvsion R1
+% FOR TVT DOS paper recvvsion R1 - 01 Aug 2026. This is NOT the latest to use for TVT R1.
 
 clc;
 close all;

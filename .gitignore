@@ -1,2 +1,2 @@
-scripts/__pycache__/
 data/**/*.bag
+**/__pycache__/

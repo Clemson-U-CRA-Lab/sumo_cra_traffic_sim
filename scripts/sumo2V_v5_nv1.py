@@ -125,9 +125,11 @@ if __name__=="__main__":
         v_tgt_lead = front_v_t[v_lead_id]
         if sim_time < STALLTIME:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=v_tgt_lead)
-        else:
+        elif sim_time >= STALLTIME and DEMO_STALL_NV0:
             sumo_sim_manager.assignTargetSpeed(vehicle_ID="nv0", tgt_spd=0)
-
+        else:
+            raise ValueError("Unexpected sim_time condition for leading vehicle speed/stall assignment.")
+        
         # Get vehicle states
         veh_states_matrix = [sumo_sim_manager.getVehicleStates(veh, returnStatesNum=5) for veh in vehicle_list]
 
@@ -167,7 +169,7 @@ if __name__=="__main__":
             sumo_sim_manager.add_traj("nv1", preds_s=preds_s["nv1"],colorChoice=(0, 255, 2, 100), fill=False, layer=4)
            
         # Assign the acceleration to leader nv0
-        if sim_time >= STALLTIME:
+        if sim_time >= STALLTIME and DEMO_STALL_NV0:
             # Stalling it
             sim_nv_array = [sim_time, 
                             veh_states_matrix[1][3], veh_states_matrix[1][2], veh_states_matrix[1][1], # ego
@@ -268,11 +270,7 @@ if __name__=="__main__":
 
         # Sleep timing
         real_now = time.monotonic()
-        # if asyncSocket:
-        #     sleep_time = max(0, real_expected_time - real_now)  # Sleep only if ahead of real time
-        #     time.sleep(sleep_time)  # Sync with real-world time
-        # print(f"{bcolors.OKGREEN}Delta T RSPC[Sim-Real]: {((real_now - real_start_time)-sim_time):.2f}s{bcolors.ENDC}")
-    
+
         ## Fixed rate scheduling.
         if asyncSocket:
             next_deadline += SIM_STEP         # fixed cadence
@@ -281,7 +279,7 @@ if __name__=="__main__":
                 time.sleep(sleep_time)
 
         # kill cleanly if vehicles out of the road.
-        if veh_1_dist[-1] >= 210:
+        if veh_1_dist and veh_1_dist[-1] >= 210:
             break
 
 

@@ -5,17 +5,17 @@
     <!-- <vType id="car" accel="2.6" decel="4.5" sigma="0.3" length="5" maxSpeed="15"/> -->
     <vType id="car" sigma="0.3" length="3.2" maxSpeed="20" speedMode='96' minGap="0.1" accel="5.0" decel="8.5"/>
 
-    <!-- Define routes -->
-    <route id="route1" edges="76146229#1"/>
-    <route id="route2" edges="-76146229#1"/>
+    <!-- Define routes (switch rute 1 wirh 2 to flip direction)-->
+    <route id="route2" edges="76146229#1"/>
+    <route id="route1" edges="-76146229#1"/>
 
     <!-- Assign vehicles to routes -->
 
-    <vehicle id="nv0" type="car" route="route1" depart="0" departPos="40"/>
-    <vehicle id="nv1" type="car" route="route1" depart="0" departPos="20" color="1,0.5,0.5"/>
+    <vehicle id="nv0" type="car" route="route1" depart="0" departPos="20"/>
+    <vehicle id="nv1" type="car" route="route1" depart="0" departPos="0" color="1,0.5,0.5"/>
 
     <!-- MachE is nv2 -->
-    <vehicle id="nv2" type="car" route="route1" depart="0" departLane="best" departPos="0" color="0,1,0"/> 
+    <vehicle id="nv2" type="car" route="route1" depart="5" departLane="best" departPos="0" color="0,1,0"/> 
 
     <!-- <vehicle id="veh4" type="car" route="route1" depart="3"/>
     <vehicle id="veh2" type="car" route="route2" depart="5"/>
