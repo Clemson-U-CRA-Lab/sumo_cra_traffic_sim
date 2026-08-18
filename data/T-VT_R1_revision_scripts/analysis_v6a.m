@@ -1,7 +1,7 @@
 %% analysis_v6a.m — TVT R1 performance plots (2veh + 3veh overlay)
 %
 % Usage:
-%   1. Set VEH2_SOURCE, VEH3_SOURCE, SPD_YSCALE below.
+%   1. Set VEH2_SOURCE, VEH3_SOURCE below.
 %   2. Run this script.
 %   3. Figures save to ./plots_performance/
 %
@@ -21,7 +21,6 @@
 clc; close all; clear all;
 
 %% ===== User knobs =====
-SPD_YSCALE  = 'linear';      % 'linear' | 'log' | 'kink'
 VEH2_SOURCE = 'hil2026';  % 'hil' | 'sim2026' | 'hil2026'
 VEH3_SOURCE = 'hil2026';  % 'sim2026' | 'hil2026'
 
@@ -31,29 +30,33 @@ VEH3_SOURCE = 'hil2026';  % 'sim2026' | 'hil2026'
 NOMINAL_MODE = 'per_folder';   % 'shared' | 'per_folder'
 NOMINAL_CTRL = 'fbStop';   % used when NOMINAL_MODE='shared': 'pred' | 'prev' | 'fbStop'
 
-% Kink y-axis (only when SPD_YSCALE='kink'): each row is a physical %δv band
-% shown at full display height. Gaps between rows are compressed.
-% Tweak these to change which ranges are expanded visually.
-SPD_KINK_BANDS = [ ...
-    -10   10; ...
-    70  100; ...
-   ];
-SPD_KINK_GAP = 0.12;   % display height of each compressed gap between bands
-SPD_KINK_BAND_H = 1;   % display height of each shown band
+% X-axis scenario order for plots. Reorder (or subset) these labels to change
+% left→right order. Each label must exist in the groupNames catalog below.
+PLOT_GROUP_ORDER = { ...
+    'No Attack', ...
+    '0.1s\10s', '0.2s\10s', '0.5s\10s', '0.75s\10s', '1s\10s', '1.5s\10s', '2s\10s',...
+    '0.5s\20s', '1s\20s', '2s\20s', ...
+    '2s\19s', '2s\22s', };
+
+% to ignor first same starting ppoint for 2nd, 3rd vhehicles.
+GAP_T_START = 10;  % min_gap uses gap from this SimTime [s] onwards
 
 %% ===== Style =====
-FIGPOS_2plots  = [300, 400, 550, 450];
+FIGPOS_2plots  = [300, 400, 550, 560];
 fontSize       = 12;
 fontSize_title = 12;
-fontSize_legend = 9;
+fontSize_legend = 10;
 
 controllers         = {'pred', 'prev', 'fbStop'};
 controllers_to_plot = 3;
 legendCtrl = {'PCF', 'PCF-I', 'PCF-IDA'};
-legendAvg  = [strcat(legendCtrl, ' (n=2)'), strcat(legendCtrl, ' (n=3; avg)')];
+legendAvg  = [strcat(legendCtrl, ' (n=2)'), strcat(legendCtrl, ' (n=3)')];
 
 axColors   = [0.0000 0.4470 0.7410; 0.8500 0.3250 0.0980; 0.9290 0.6940 0.1250];
 lineStyles = {'-', '--'};  % 2veh solid, 3veh dashed
+lineStylesGapPairs = {'-', '--', ':'};  % 2veh, 3veh front, 3veh rear
+legendGapPairs = [strcat(legendCtrl, ' (n=2)'), ...
+    strcat(legendCtrl, ' front (n=3)'), strcat(legendCtrl, ' rear (n=3)')];
 
 %% ===== Paths =====
 scriptDir = fileparts(mfilename('fullpath'));
@@ -168,9 +171,8 @@ groups2 = {
 };
 
 %% ===== 2veh metrics =====
-[rms_spd_g2, rms_dist_g2, min_gap_g2, collisions_g2, rms_acc_g2, sim_dur_g2, missing2] = ...
+[rms_spd_g2, rms_dist_g2, min_gap_g2, rms_acc_g2, missing2] = ...
     deal(nan(nGroups, controllers_to_plot), nan(nGroups, controllers_to_plot), ...
-         nan(nGroups, controllers_to_plot), nan(nGroups, controllers_to_plot), ...
          nan(nGroups, controllers_to_plot), nan(nGroups, controllers_to_plot), {});
 
 switch lower(VEH2_SOURCE)
@@ -179,12 +181,12 @@ switch lower(VEH2_SOURCE)
         % Resolve relative paths against data/2025_08_31
         hilBase = fullfile(dataRoot, '2025_08_31');
         n2 = numel(fileStruct2);
-        [rms_spd2, rms_dist2, rms_acc2, min_gap2, col2, dur2] = deal(nan(n2, 1));
+        [rms_spd2, rms_dist2, rms_acc2, min_gap2] = deal(nan(n2, 1));
         for i = 1:n2
             fpath = fullfile(hilBase, fileStruct2(i).file);
-            m = pair_metrics(sanitize_leading_gap(readtable(fpath)), 'v0', 'v1');
+            m = pair_metrics(readtable(fpath), 'v0', 'v1', GAP_T_START);
             rms_spd2(i) = m.rms_spd; rms_dist2(i) = m.rms_gap; rms_acc2(i) = m.rms_acc;
-            min_gap2(i) = m.min_gap; col2(i) = m.collisions; dur2(i) = m.duration;
+            min_gap2(i) = m.min_gap;
         end
         for g = 1:nGroups
             for k = 1:controllers_to_plot
@@ -193,21 +195,19 @@ switch lower(VEH2_SOURCE)
                 rms_spd_g2(g, k) = rms_spd2(idx);
                 rms_dist_g2(g, k) = rms_dist2(idx);
                 min_gap_g2(g, k) = min_gap2(idx);
-                collisions_g2(g, k) = col2(idx);
                 rms_acc_g2(g, k) = rms_acc2(idx);
-                sim_dur_g2(g, k) = dur2(idx);
             end
         end
 
     case 'sim2026'
         fprintf('2veh source: sim2026 (%s)\n', expSim);
-        [rms_spd_g2, rms_dist_g2, min_gap_g2, collisions_g2, rms_acc_g2, sim_dur_g2, missing2] = ...
-            load_run_metrics(ctrlDirs2sim, controllers, controllers_to_plot, nGroups, runId_for_group);
+        [rms_spd_g2, rms_dist_g2, min_gap_g2, rms_acc_g2, missing2] = ...
+            load_run_metrics(ctrlDirs2sim, controllers, controllers_to_plot, nGroups, runId_for_group, GAP_T_START);
 
     case 'hil2026'
         fprintf('2veh source: hil2026 (%s)\n', expHil);
-        [rms_spd_g2, rms_dist_g2, min_gap_g2, collisions_g2, rms_acc_g2, sim_dur_g2, missing2] = ...
-            load_run_metrics(ctrlDirs2hil, controllers, controllers_to_plot, nGroups, runId_for_group);
+        [rms_spd_g2, rms_dist_g2, min_gap_g2, rms_acc_g2, missing2] = ...
+            load_run_metrics(ctrlDirs2hil, controllers, controllers_to_plot, nGroups, runId_for_group, GAP_T_START);
 
     otherwise
         error('VEH2_SOURCE must be ''hil'', ''sim2026'', or ''hil2026'', got %s', VEH2_SOURCE);
@@ -242,13 +242,13 @@ switch lower(NOMINAL_MODE)
     otherwise
         error('NOMINAL_MODE must be ''shared'' or ''per_folder'', got %s', NOMINAL_MODE);
 end
-col_rate_g2 = collisions_g2 ./ sim_dur_g2;
 
 %% ===== 3veh metrics (front pair + avg of both pairs) =====
-[rms_spd_g3, rms_dist_g3, min_gap_g3, collisions_g3, rms_acc_g3, sim_dur_g3] = ...
+[rms_spd_g3, rms_dist_g3, min_gap_g3, rms_acc_g3] = ...
     deal(nan(nGroups, controllers_to_plot));
-[rms_spd_g3avg, rms_dist_g3avg, min_gap_g3avg, collisions_g3avg, rms_acc_g3avg] = ...
+[rms_spd_g3avg, rms_dist_g3avg, min_gap_g3avg, rms_acc_g3avg] = ...
     deal(nan(nGroups, controllers_to_plot));
+min_gap_g3rear = nan(nGroups, controllers_to_plot);
 missing3 = {};
 
 for g = 1:nGroups
@@ -261,21 +261,19 @@ for g = 1:nGroups
             missing3{end+1} = sprintf('%s r%d (%s)', ctrl, runId, ctrlDirs3.(ctrl)); %#ok<AGROW>
             continue
         end
-        data = sanitize_leading_gap(readtable(csvPath));
-        mf = pair_metrics(data, 'v0', 'v1');  % front↔ego
-        mr = pair_metrics(data, 'v1', 'v2');  % ego↔rear
+        data = readtable(csvPath);
+        mf = pair_metrics(data, 'v0', 'v1', GAP_T_START);  % front↔ego
+        mr = pair_metrics(data, 'v1', 'v2', GAP_T_START);  % ego↔rear
 
         rms_spd_g3(g, k) = mf.rms_spd;
         rms_dist_g3(g, k) = mf.rms_gap;
         rms_acc_g3(g, k) = mf.rms_acc;
         min_gap_g3(g, k) = mf.min_gap;
-        collisions_g3(g, k) = mf.collisions;
-        sim_dur_g3(g, k) = mf.duration;
+        min_gap_g3rear(g, k) = mr.min_gap;
 
         rms_spd_g3avg(g, k) = mean([mf.rms_spd, mr.rms_spd], 'omitnan');
         rms_dist_g3avg(g, k) = mean([mf.rms_gap, mr.rms_gap], 'omitnan');
         min_gap_g3avg(g, k) = mean([mf.min_gap, mr.min_gap], 'omitnan');
-        collisions_g3avg(g, k) = mean([mf.collisions, mr.collisions], 'omitnan');
         rms_acc_g3avg(g, k) = mean([mf.rms_acc, mr.rms_acc], 'omitnan');
     end
 end
@@ -300,39 +298,57 @@ switch lower(NOMINAL_MODE)
         pct_dist_g3avg = 100 * (rms_dist_g3avg - rms_dist_g3avg(1, :)) ./ rms_dist_g3avg(1, :);
         pct_acc_g3avg  = 100 * (rms_acc_g3avg  - rms_acc_g3avg(1, :))  ./ rms_acc_g3avg(1, :);
 end
-col_rate_g3 = collisions_g3 ./ sim_dur_g3;
-col_rate_g3avg = collisions_g3avg ./ sim_dur_g3;
 
 % Combined for plot: cols = [2veh x3, 3veh-avg x3]
 pct_spd_avg = [pct_spd_g2, pct_spd_g3avg];
 rms_spd_avg = [rms_spd_g2, rms_spd_g3avg];
 pct_acc_avg = [pct_acc_g2, pct_acc_g3avg];
 rms_acc_avg = [rms_acc_g2, rms_acc_g3avg];
-min_gap_avg = [min_gap_g2, min_gap_g3avg];
 
-%% ===== Figures (2veh + 3veh avg only) =====
-kinkCfg = struct('bands', SPD_KINK_BANDS, 'gapH', SPD_KINK_GAP, 'bandH', SPD_KINK_BAND_H);
+% Apply editable x-axis scenario order (PLOT_GROUP_ORDER)
+[plotIdx, groupNamesPlot] = resolve_group_plot_order(PLOT_GROUP_ORDER, groupNames);
+pct_spd_avg = pct_spd_avg(plotIdx, :);
+rms_spd_avg = rms_spd_avg(plotIdx, :);
+pct_acc_avg = pct_acc_avg(plotIdx, :);
+rms_acc_avg = rms_acc_avg(plotIdx, :);
+% cols = [2veh x3, 3veh-front x3, 3veh-rear x3]
+min_gap_pairs = [min_gap_g2(plotIdx, :), min_gap_g3(plotIdx, :), min_gap_g3rear(plotIdx, :)];
+% 3veh gap = min(front, rear) rather than mean of the two pair mins
+min_gap_minpairs = [min_gap_g2(plotIdx, :), min(min_gap_g3(plotIdx, :), min_gap_g3rear(plotIdx, :))];
 
+%% ===== Figures =====
 % Fig 1: control effort (%δ + absolute RMS)
 f_effort = make_effort_fig(pct_acc_avg, rms_acc_avg, ...
-    groupNames, legendAvg, fontSize, fontSize_title, fontSize_legend, FIGPOS_2plots, ...
+    groupNamesPlot, legendAvg, fontSize, fontSize_title, fontSize_legend, FIGPOS_2plots, ...
     2, axColors, lineStyles, controllers_to_plot);
 
 % Fig 2: speed error (absolute RMS + %δ)
 f_spd = make_spd_fig(rms_spd_avg, pct_spd_avg, ...
-    groupNames, legendAvg, SPD_YSCALE, fontSize, fontSize_title, fontSize_legend, FIGPOS_2plots, ...
-    2, axColors, lineStyles, controllers_to_plot, kinkCfg);
+    groupNamesPlot, legendAvg, fontSize, fontSize_title, fontSize_legend, FIGPOS_2plots, ...
+    2, axColors, lineStyles, controllers_to_plot);
 
-% Fig 3: performance (speed %δ + lowest gap) — unchanged 2-subplot layout
-f_perf = make_perf_fig(pct_spd_avg, min_gap_avg, [], false, ...
-    groupNames, legendAvg, SPD_YSCALE, fontSize, fontSize_title, fontSize_legend, FIGPOS_2plots, ...
-    {'', ''}, ...
-    2, axColors, lineStyles, controllers_to_plot, kinkCfg);
+gapTitleNote = sprintf(' (t>=%.3gs)', GAP_T_START);
+
+% Fig 3: speed %δ + both 3veh pair gaps
+gapPlot = struct('nCfg', 3);
+gapPlot.lineStyles = lineStylesGapPairs;
+gapPlot.legendLabels = legendGapPairs;
+f_perf_pairs = make_perf_fig(pct_spd_avg, min_gap_pairs, [], false, ...
+    groupNamesPlot, legendAvg, fontSize, fontSize_title, fontSize_legend, FIGPOS_2plots, ...
+    {'', [' (front & rear pairs)' gapTitleNote]}, ...
+    2, axColors, lineStyles, controllers_to_plot, gapPlot);
+
+% Fig 4: speed %δ + 3veh gap = min of the two pair mins
+f_perf_min = make_perf_fig(pct_spd_avg, min_gap_minpairs, [], false, ...
+    groupNamesPlot, legendAvg, fontSize, fontSize_title, fontSize_legend, FIGPOS_2plots, ...
+    {'', [' (min of pairs)' gapTitleNote]}, ...
+    2, axColors, lineStyles, controllers_to_plot);
 
 %% ===== Save =====
 save_fig(f_effort, plotDir, 'R1_effort_3veh_avg.png');
 save_fig(f_spd,    plotDir, 'R1_speed_3veh_avg.png');
-save_fig(f_perf,   plotDir, 'R1_performance_3veh_avg_2panel.png');
+save_fig(f_perf_pairs, plotDir, 'performance_R1_gap_pairs.png');
+save_fig(f_perf_min, plotDir, 'performance_R1.png');
 fprintf('Saved figures to %s\n', plotDir);
 
 %% ===== Summary tables =====
@@ -341,27 +357,29 @@ fprintf('\n=== Summary Metrics ===\n');
 summaryRows = {};
 for cfgTag = ["2veh", "3veh", "3veh_avg"]
     if cfgTag == "2veh"
-        pct_spd = pct_spd_g2; pct_dist = pct_dist_g2; col_rate = col_rate_g2;
+        pct_spd = pct_spd_g2; pct_dist = pct_dist_g2; pct_acc = pct_acc_g2;
     elseif cfgTag == "3veh"
-        pct_spd = pct_spd_g3; pct_dist = pct_dist_g3; col_rate = col_rate_g3;
+        pct_spd = pct_spd_g3; pct_dist = pct_dist_g3; pct_acc = pct_acc_g3;
     else
-        pct_spd = pct_spd_g3avg; pct_dist = pct_dist_g3avg; col_rate = col_rate_g3avg;
+        pct_spd = pct_spd_g3avg; pct_dist = pct_dist_g3avg; pct_acc = pct_acc_g3avg;
     end
     for g = 1:nGroups
         fprintf('\n[%s] Group: %s\n', cfgTag, groupNames{g});
-        fprintf('%-10s | %-12s | %-12s | %-14s\n', 'Controller', 'RMS Speed %', 'RMS Gap %', 'Collision Rate');
-        fprintf('%s\n', repmat('-', 1, 56));
+        fprintf('%-10s | %-12s | %-12s | %-12s\n', ...
+            'Controller', 'RMS Speed %', 'RMS Gap %', 'RMS Effort %');
+        fprintf('%s\n', repmat('-', 1, 55));
         for k = 1:controllers_to_plot
-            fprintf('%-10s | %12.3f | %12.3f | %14.4f\n', ...
-                controllerNames{k}, pct_spd(g, k), pct_dist(g, k), col_rate(g, k));
+            fprintf('%-10s | %12.3f | %12.3f | %12.3f\n', ...
+                controllerNames{k}, pct_spd(g, k), pct_dist(g, k), pct_acc(g, k));
             summaryRows(end+1, :) = {char(cfgTag), groupNames{g}, controllerNames{k}, ...
-                pct_spd(g, k), pct_dist(g, k), col_rate(g, k)}; %#ok<AGROW>
+                pct_spd(g, k), pct_dist(g, k), pct_acc(g, k)}; %#ok<AGROW>
         end
     end
 end
 
 summaryTable = cell2table(summaryRows, ...
-    'VariableNames', {'Config', 'Group', 'Controller', 'RMS_Speed_Dev_pct', 'RMS_Gap_Dev_pct', 'CollisionRate_per_s'});
+    'VariableNames', {'Config', 'Group', 'Controller', ...
+    'RMS_Speed_Dev_pct', 'RMS_Gap_Dev_pct', 'RMS_Effort_Dev_pct'});
 disp(summaryTable)
 
 summaryCsv = fullfile(plotDir, sprintf('R1_summary_%s_%s.csv', VEH2_SOURCE, VEH3_SOURCE));
@@ -377,14 +395,14 @@ for cfgTag = ["2veh", "3veh", "3veh_avg"]
               strcmp(filteredTable.Controller, controllerNames{k});
         spdVals = filteredTable.RMS_Speed_Dev_pct(idx);
         gapVals = filteredTable.RMS_Gap_Dev_pct(idx);
-        colVals = filteredTable.CollisionRate_per_s(idx);
+        accVals = filteredTable.RMS_Effort_Dev_pct(idx);
         fprintf('\n%s / %s\n', cfgTag, controllerNames{k});
-        fprintf('  RMS Speed Dev %% : min = %.3f, max = %.3f\n', ...
+        fprintf('  RMS Speed Dev %%  : min = %.3f, max = %.3f\n', ...
             min(spdVals, [], 'omitnan'), max(spdVals, [], 'omitnan'));
-        fprintf('  RMS Gap Dev %%   : min = %.3f, max = %.3f\n', ...
+        fprintf('  RMS Gap Dev %%    : min = %.3f, max = %.3f\n', ...
             min(gapVals, [], 'omitnan'), max(gapVals, [], 'omitnan'));
-        fprintf('  Collision Rate   : min = %.4f, max = %.4f\n', ...
-            min(colVals, [], 'omitnan'), max(colVals, [], 'omitnan'));
+        fprintf('  RMS Effort Dev %% : min = %.3f, max = %.3f\n', ...
+            min(accVals, [], 'omitnan'), max(accVals, [], 'omitnan'));
     end
 end
 
@@ -401,14 +419,12 @@ function warn_missing(tag, missing)
     end
 end
 
-function [rms_spd, rms_dist, min_gap, collisions, rms_acc, sim_dur, missing] = ...
-        load_run_metrics(ctrlDirs, controllers, nCtrl, nGroups, runId_for_group)
+function [rms_spd, rms_dist, min_gap, rms_acc, missing] = ...
+        load_run_metrics(ctrlDirs, controllers, nCtrl, nGroups, runId_for_group, gapTStart)
     rms_spd = nan(nGroups, nCtrl);
     rms_dist = nan(nGroups, nCtrl);
     min_gap = nan(nGroups, nCtrl);
-    collisions = nan(nGroups, nCtrl);
     rms_acc = nan(nGroups, nCtrl);
-    sim_dur = nan(nGroups, nCtrl);
     missing = {};
     for g = 1:nGroups
         runId = runId_for_group(g);
@@ -420,25 +436,17 @@ function [rms_spd, rms_dist, min_gap, collisions, rms_acc, sim_dur, missing] = .
                 missing{end+1} = sprintf('%s r%d (%s)', ctrl, runId, ctrlDirs.(ctrl)); %#ok<AGROW>
                 continue
             end
-            m = pair_metrics(sanitize_leading_gap(readtable(csvPath)), 'v0', 'v1');
+            m = pair_metrics(readtable(csvPath), 'v0', 'v1', gapTStart);
             rms_spd(g, k) = m.rms_spd;
             rms_dist(g, k) = m.rms_gap;
             rms_acc(g, k) = m.rms_acc;
             min_gap(g, k) = m.min_gap;
-            collisions(g, k) = m.collisions;
-            sim_dur(g, k) = m.duration;
         end
     end
 end
 
-function m = pair_metrics(data, leader, ego)
-%PAIR_METRICS Match analysis_v5.m exactly for one leader↔ego pair:
-%   spd_diff = vL_spd - vE_spd
-%   dist_diff / gap = vL_dist - vE_dist - 3.25   (bumper gap; 3.25 m vehicle length)
-%   rms_spd  = sqrt(mean(spd_diff.^2))
-%   rms_gap  = sqrt(mean(dist_diff.^2))
-%   rms_acc  = sqrt(mean(ego_accCmd.^2))
-%   min_gap  = min(dist_diff)
+function m = pair_metrics(data, leader, ego, gapTStart)
+%PAIR_METRICS One leader↔ego pair. RMS uses full series; min_gap uses gap(i0:end).
     spdL = data.([leader '_spd_m_s_']);
     spdE = data.([ego '_spd_m_s_']);
     distL = data.([leader '_dist_m_']);
@@ -450,9 +458,13 @@ function m = pair_metrics(data, leader, ego)
     m.rms_spd = sqrt(mean(spd_diff.^2));
     m.rms_gap = sqrt(mean(gap.^2));
     m.rms_acc = sqrt(mean(accE.^2));
-    m.min_gap = min(gap);
-    m.collisions = count_collision_events(gap);
-    m.duration = data.SimTime_sec_(end) - data.SimTime_sec_(1);
+
+    i0 = find(data.SimTime_sec_ >= gapTStart, 1, 'first');
+    if isempty(i0)
+        m.min_gap = nan;
+    else
+        m.min_gap = min(gap(i0:end));
+    end
 end
 
 function fig = make_effort_fig(pct_acc, rms_acc, groupNames, legendLabels, ...
@@ -483,7 +495,7 @@ function fig = make_effort_fig(pct_acc, rms_acc, groupNames, legendLabels, ...
 end
 
 function fig = make_spd_fig(rms_spd, pct_spd, groupNames, legendLabels, ...
-        spdScale, fontSize, fontSize_title, fontSize_legend, figPos, nCfg, axColors, lineStyles, nCtrl, kinkCfg)
+        fontSize, fontSize_title, fontSize_legend, figPos, nCfg, axColors, lineStyles, nCtrl)
     fig = figure('DefaultAxesFontsize', fontSize);
     tiledlayout(2, 1, 'TileSpacing', 'tight', 'Padding', 'tight');
 
@@ -496,8 +508,7 @@ function fig = make_spd_fig(rms_spd, pct_spd, groupNames, legendLabels, ...
     grid on; box on; ax1 = gca;
 
     nexttile
-    plot_cfg_series(spd_ydata(pct_spd, spdScale, kinkCfg), lineStyles, nCtrl, nCfg, axColors);
-    apply_spd_yscale(spdScale, kinkCfg);
+    plot_cfg_series(pct_spd, lineStyles, nCtrl, nCfg, axColors);
     style_group_xaxis(groupNames);
     ylabel('% \delta v');
     title('Percent Change in RMS Speed Error', ...
@@ -511,15 +522,26 @@ function fig = make_spd_fig(rms_spd, pct_spd, groupNames, legendLabels, ...
 end
 
 function fig = make_perf_fig(pct_spd, min_gap, pct_acc, withEffort, ...
-        groupNames, legendLabels, spdScale, fontSize, fontSize_title, fontSize_legend, figPos, ...
-        titleSuffix, nCfg, axColors, lineStyles, nCtrl, kinkCfg)
+        groupNames, legendLabels, fontSize, fontSize_title, fontSize_legend, figPos, ...
+        titleSuffix, nCfg, axColors, lineStyles, nCtrl, gapPlot)
     if nargin < 14, lineStyles = {'-'}; end
     if nargin < 15, nCtrl = size(pct_spd, 2) / nCfg; end
-    if nargin < 16 || isempty(kinkCfg)
-        kinkCfg = struct('bands', [0 10; 50 60; 100 200], 'gapH', 0.12, 'bandH', 1);
+    if nargin < 16
+        gapPlot = [];
     end
     if isempty(titleSuffix), titleSuffix = {'', '', ''}; end
     while numel(titleSuffix) < 3, titleSuffix{end+1} = ''; end %#ok<AGROW>
+
+    useGapOverride = ~isempty(gapPlot);
+    if useGapOverride
+        gapNCfg = gapPlot.nCfg;
+        gapLineStyles = gapPlot.lineStyles;
+        gapLegend = gapPlot.legendLabels;
+    else
+        gapNCfg = nCfg;
+        gapLineStyles = lineStyles;
+        gapLegend = legendLabels;
+    end
 
     nTiles = 2 + double(withEffort);
     fig = figure('DefaultAxesFontsize', fontSize);
@@ -527,11 +549,10 @@ function fig = make_perf_fig(pct_spd, min_gap, pct_acc, withEffort, ...
 
     nexttile
     if nCfg == 1
-        plot(spd_ydata(pct_spd, spdScale, kinkCfg), '-o', 'LineWidth', 2);
+        plot(pct_spd, '-o', 'LineWidth', 1);
     else
-        plot_cfg_series(spd_ydata(pct_spd, spdScale, kinkCfg), lineStyles, nCtrl, nCfg, axColors);
+        plot_cfg_series(pct_spd, lineStyles, nCtrl, nCfg, axColors);
     end
-    apply_spd_yscale(spdScale, kinkCfg);
     style_group_xaxis(groupNames);
     ylabel(' % \delta v');
     title(['Percent Change in RMS Speed Error' titleSuffix{1}], ...
@@ -539,15 +560,15 @@ function fig = make_perf_fig(pct_spd, min_gap, pct_acc, withEffort, ...
     grid on; box on; ax1 = gca;
 
     nexttile
-    if nCfg == 1
+    if gapNCfg == 1
         plot(min_gap, '-o', 'LineWidth', 2); hold on;
     else
-        plot_cfg_series(min_gap, lineStyles, nCtrl, nCfg, axColors);
+        plot_cfg_series(min_gap, gapLineStyles, nCtrl, gapNCfg, axColors);
     end
     yline(0, 'LineWidth', 1, 'LineStyle', '--', 'Color', 'k');
     style_group_xaxis(groupNames);
     ylabel('Lowest gap [m]');
-    title(['Lowest Gap observed' titleSuffix{2}], ...
+    title('Lowest Observed Gap', ...
         'FontSize', fontSize_title, 'FontWeight', 'bold');
     grid on; box on; ax2 = gca;
 
@@ -566,10 +587,10 @@ function fig = make_perf_fig(pct_spd, min_gap, pct_acc, withEffort, ...
         grid on; box on; axs(end+1) = gca; %#ok<AGROW>
     end
 
-    if nCfg > 1
-        lgd = legend(legendLabels, 'Location', 'southoutside', 'Orientation', 'horizontal', 'NumColumns', 3);
+    if gapNCfg > 1
+        lgd = legend(ax2, gapLegend, 'Location', 'southoutside', 'Orientation', 'horizontal', 'NumColumns', 3);
     else
-        lgd = legend(legendLabels, 'Location', 'southoutside', 'Orientation', 'horizontal');
+        lgd = legend(ax2, gapLegend, 'Location', 'southoutside', 'Orientation', 'horizontal');
     end
     lgd.FontSize = fontSize_legend;
     linkaxes(axs, 'x');
@@ -580,148 +601,41 @@ function style_group_xaxis(groupNames)
     set(gca, 'XTickLabel', groupNames, 'XTick', 1:numel(groupNames), 'XTickLabelRotation', 45);
 end
 
+function [idx, names] = resolve_group_plot_order(order, catalog)
+%RESOLVE_GROUP_PLOT_ORDER Map PLOT_GROUP_ORDER labels onto catalog indices.
+    if isempty(order)
+        idx = 1:numel(catalog);
+        names = catalog;
+        return
+    end
+    idx = zeros(1, numel(order));
+    for i = 1:numel(order)
+        j = find(strcmp(catalog, order{i}), 1);
+        if isempty(j)
+            error('PLOT_GROUP_ORDER entry ''%s'' not found in groupNames catalog', order{i});
+        end
+        idx(i) = j;
+    end
+    names = catalog(idx);
+end
+
 function plot_cfg_series(Y, lineStyles, nCtrl, nCfg, axColors)
+    % c=1: 2veh (solid, thinner, circle)
+    % c=2: 3veh / front (dashed, square)
+    % c=3: 3veh rear (dotted, triangle)
+    markers = {'o', 's', '^'};
+    lineWidths = [1, 2, 2];
     hold on
     for c = 1:nCfg
         for k = 1:nCtrl
             col = (c - 1) * nCtrl + k;
-            plot(Y(:, col), 'LineWidth', 2, 'LineStyle', lineStyles{c}, ...
-                'Marker', 'o', 'Color', axColors(k, :));
+            mk = markers{min(c, numel(markers))};
+            lw = lineWidths(min(c, numel(lineWidths)));
+            plot(Y(:, col), 'LineWidth', lw, 'LineStyle', lineStyles{c}, ...
+                'Marker', mk, 'Color', axColors(k, :));
         end
     end
     hold off
-end
-
-function Y = spd_ydata(pct, mode, kinkCfg)
-    switch lower(mode)
-        case 'log'
-            Y = max(0.01, pct);
-        case 'kink'
-            Y = map_kink_y(pct, kinkCfg);
-        otherwise
-            Y = pct;
-    end
-end
-
-function apply_spd_yscale(mode, kinkCfg)
-    switch lower(mode)
-        case 'log'
-            set(gca, 'YScale', 'log');
-            ylim([0.01, 200]);
-            yticks([0.01, 1, 25, 200]);
-        case 'kink'
-            set(gca, 'YScale', 'linear');
-            [ticks, labels, yLo, yHi, kinkY] = kink_axis_ticks(kinkCfg);
-            ylim([yLo, yHi]);
-            yticks(ticks);
-            yticklabels(labels);
-            draw_kink_marks(gca, kinkY);
-        otherwise
-            set(gca, 'YScale', 'linear');
-    end
-end
-
-function yDisp = map_kink_y(y, kinkCfg)
-%MAP_KINK_Y Map physical %δv onto display coords using editable bands.
-% Shown bands (rows of kinkCfg.bands) get height bandH each.
-% Intervals between bands are compressed to height gapH each.
-    bands = kinkCfg.bands;
-    gapH = kinkCfg.gapH;
-    bandH = kinkCfg.bandH;
-    nB = size(bands, 1);
-
-    % Build piecewise segments: shown, then compressed (except after last)
-    % edgesPhys: sorted unique physical breakpoints covering all segments
-    edges = bands(1, 1);
-    segIsShown = false(0, 1);
-    for b = 1:nB
-        edges(end+1) = bands(b, 2); %#ok<AGROW>
-        segIsShown(end+1) = true; %#ok<AGROW>
-        if b < nB
-            edges(end+1) = bands(b+1, 1); %#ok<AGROW>
-            segIsShown(end+1) = false; %#ok<AGROW>
-        end
-    end
-
-    segH = zeros(numel(segIsShown), 1);
-    for s = 1:numel(segIsShown)
-        if segIsShown(s)
-            segH(s) = bandH;
-        else
-            segH(s) = gapH;
-        end
-    end
-    dispEdges = [0; cumsum(segH)];
-
-    yDisp = nan(size(y));
-    for i = 1:numel(y)
-        v = y(i);
-        if isnan(v)
-            continue
-        elseif v < edges(1)
-            yDisp(i) = 0;
-            continue
-        elseif v > edges(end)
-            yDisp(i) = dispEdges(end) + min((v - edges(end)) / max(edges(end), 1), 0.5);
-            continue
-        end
-        for s = 1:numel(segIsShown)
-            lo = edges(s);
-            hi = edges(s+1);
-            if v <= hi || s == numel(segIsShown)
-                if hi == lo
-                    frac = 0;
-                else
-                    frac = (v - lo) / (hi - lo);
-                end
-                yDisp(i) = dispEdges(s) + frac * segH(s);
-                break
-            end
-        end
-    end
-end
-
-function [ticks, labels, yLo, yHi, kinkY] = kink_axis_ticks(kinkCfg)
-    bands = kinkCfg.bands;
-    phys = bands(1, 1);
-    for b = 1:size(bands, 1)
-        phys(end+1) = bands(b, 2); %#ok<AGROW>
-        if b < size(bands, 1)
-            phys(end+1) = bands(b+1, 1); %#ok<AGROW>
-        end
-    end
-    ticks = map_kink_y(phys, kinkCfg);
-    labels = arrayfun(@(v) sprintf('%g', v), phys, 'UniformOutput', false);
-    yLo = 0;
-    yHi = ticks(end);
-
-    % Kink marks at midpoints of compressed gaps in display coords
-    kinkY = [];
-    yCursor = 0;
-    for b = 1:size(bands, 1)-1
-        yCursor = yCursor + kinkCfg.bandH;
-        kinkY(end+1) = yCursor + 0.5 * kinkCfg.gapH; %#ok<AGROW>
-        yCursor = yCursor + kinkCfg.gapH;
-    end
-end
-
-function draw_kink_marks(ax, kinkY)
-    hold(ax, 'on');
-    xl = xlim(ax);
-    x0 = xl(1);
-    dx = 0.015 * (xl(2) - xl(1));
-    for yi = kinkY
-        plot(ax, [x0 - dx, x0 + dx], [yi - 0.04, yi + 0.04], 'k-', 'LineWidth', 1.2, 'Clipping', 'off');
-        plot(ax, [x0 - dx, x0 + dx], [yi - 0.01, yi + 0.07], 'k-', 'LineWidth', 1.2, 'Clipping', 'off');
-    end
-    hold(ax, 'off');
-end
-
-function n = count_collision_events(gap)
-    collision_mask = gap <= 0.5;
-    collision_mask(isnan(collision_mask)) = false;
-    d_mask = diff([0; collision_mask(:)]);
-    n = sum(d_mask == 1);
 end
 
 function csvPath = find_run_csv(dirPath, runId)
@@ -737,13 +651,3 @@ function csvPath = find_run_csv(dirPath, runId)
     end
 end
 
-function data = sanitize_leading_gap(data)
-% First 30 samples: force leader dist=20, clamp ego if >20 (same as analysis_v5.m).
-    n = min(30, height(data));
-    for j = 1:n
-        if data.v1_dist_m_(j) > 20
-            data.v1_dist_m_(j) = 0;
-        end
-        data.v0_dist_m_(j) = 20;
-    end
-end
