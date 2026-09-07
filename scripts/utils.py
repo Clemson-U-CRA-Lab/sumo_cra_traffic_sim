@@ -445,7 +445,10 @@ def driving_cycle_state_preview_searching(sim_t, record_t, front_v_t, mpc_dt, fr
         t_id = np.argmin(np.abs([record_t - (i * mpc_dt + sim_t)]))
         cycle_vs[i] = front_v_t[t_id]
     
-    cycle_ss = scipy.integrate.cumulative_trapezoid(cycle_vs, dx=mpc_dt) + front_s_init
+    # Keep the position preview the same length as the velocity preview. The
+    # generated Eco-MPC interface consumes one reference for every stage.
+    cycle_ss = (scipy.integrate.cumulative_trapezoid(
+        cycle_vs, dx=mpc_dt, initial=0.0) + front_s_init)
     
     return cycle_vs, cycle_ss
 
