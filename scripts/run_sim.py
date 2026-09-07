@@ -325,7 +325,7 @@ if __name__=="__main__":
         print('Use online MPC to control traffic vehicles')
     elif USING_EXPLICIT_UNCONNECTED:
         explicit_control = ExplicitMPCUnconnectedController(
-            config=ExplicitMPCConfig(dt=0.1, horizon=32, sample_count=400),
+            config=ExplicitMPCConfig(dt=0.5, horizon=32, sample_count=400),
             generate_regions=True,
             print_level=args.print_level)
         controller_name = 'Explicit_Unconnected'
@@ -374,7 +374,7 @@ if __name__=="__main__":
             vehicle_index=args.preview_vehicle_index,
         )
     
-    while sumo_sim_manager.step * 0.1 < record_t[-1] + 10:
+    while sumo_sim_manager.step * 0.1 < record_t[-1] + 20:
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
         runtime_dt = 0.0
