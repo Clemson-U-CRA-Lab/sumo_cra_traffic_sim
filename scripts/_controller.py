@@ -9,17 +9,22 @@ from scipy.interpolate import RegularGridInterpolator
 import math
 import csv
 import os
+import hashlib
+import json
+import tempfile
 import numpy as np
 
 
 class ExplicitMPCConfig:
     """Configuration for the reconstructed fixed-horizon explicit MPC."""
 
-    def __init__(self, dt=0.1, horizon=32, vehicle_length=7.0,
-                 desired_gap=2.0, minimum_gap=2.0, time_headway=0.0,
-                 v_min=0.0, v_max=35.0, u_min=-4.0, u_max=4.0,
-                 q_gap=1.0, q_acceleration=2050.0, q_command=1.0,
-                 q_slack=1.0e6, sample_count=400, random_seed=44):
+    def __init__(self, dt=0.1, horizon=20, vehicle_length=7.0,
+                 desired_gap=0.0, minimum_gap=0.0, time_headway=0.0,
+                 v_min=0.0, v_max=35.0, u_min=-3.0, u_max=3.0,
+                 q_gap=1.0, q_acceleration=2000.0, q_command=2000.0,
+                 q_slack=1.0e6, sample_count=400, random_seed=44,
+                 enable_cbf=True, include_acceleration_speed_constraints=False,
+                 cache_regions=True, region_cache_dir=None):
         if horizon <= 0:
             raise ValueError("Explicit MPC horizon must be positive.")
         self.dt = float(dt)
@@ -38,6 +43,12 @@ class ExplicitMPCConfig:
         self.q_slack = float(q_slack)
         self.sample_count = int(sample_count)
         self.random_seed = int(random_seed)
+        self.enable_cbf = bool(enable_cbf)
+        self.include_acceleration_speed_constraints = bool(
+            include_acceleration_speed_constraints
+        )
+        self.cache_regions = bool(cache_regions)
+        self.region_cache_dir = region_cache_dir
 
 
 class ExplicitMPCRegion:
@@ -78,8 +89,146 @@ class _ExplicitMPCBase:
         self.fallback_count = 0
         self.region_hits = 0
         self.last_diagnostics = {}
+        self.region_cache_path = self._region_cache_path()
         if generate_regions:
-            self.generate_regions()
+            loaded_from_cache = self.config.cache_regions and self.load_regions()
+            if not loaded_from_cache:
+                self.generate_regions()
+                if self.config.cache_regions:
+                    self.save_regions()
+
+    def _region_cache_path(self):
+        """Return a configuration-specific cache path for the region set."""
+        cache_settings = {
+            "schema": 1,
+            "mode": self.mode,
+            "dt": self.config.dt,
+            "horizon": self.config.horizon,
+            "vehicle_length": self.config.vehicle_length,
+            "desired_gap": self.config.desired_gap,
+            "minimum_gap": self.config.minimum_gap,
+            "time_headway": self.config.time_headway,
+            "v_min": self.config.v_min,
+            "v_max": self.config.v_max,
+            "u_min": self.config.u_min,
+            "u_max": self.config.u_max,
+            "q_gap": self.config.q_gap,
+            "q_acceleration": self.config.q_acceleration,
+            "q_command": self.config.q_command,
+            "q_slack": self.config.q_slack,
+            "sample_count": self.config.sample_count,
+            "random_seed": self.config.random_seed,
+            "include_acceleration_speed_constraints": (
+                self.config.include_acceleration_speed_constraints
+            ),
+            "theta_dim": self.theta_dim,
+        }
+        signature = hashlib.sha256(
+            json.dumps(cache_settings, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:16]
+        cache_dir = self.config.region_cache_dir
+        if cache_dir is None:
+            cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     ".explicit_mpc_cache")
+        filename = (
+            f"{self.mode}_N{self.config.horizon}_samples"
+            f"{self.config.sample_count}_{signature}.npz"
+        )
+        return os.path.join(cache_dir, filename)
+
+    def load_regions(self):
+        """Load a previously generated region set if it matches this QP."""
+        if not os.path.exists(self.region_cache_path):
+            return False
+        try:
+            with np.load(self.region_cache_path, allow_pickle=True) as data:
+                region_count = int(data["region_count"])
+                if int(data["theta_dim"]) != self.theta_dim:
+                    return False
+                if int(data["constraint_count"]) != len(self.constraint_names):
+                    return False
+                regions = []
+                for index in range(region_count):
+                    active_set = tuple(
+                        np.asarray(data["active_sets"][index], dtype=int).tolist()
+                    )
+                    region = ExplicitMPCRegion(
+                        theta_lower=np.full(self.theta_dim, -np.inf),
+                        theta_upper=np.full(self.theta_dim, np.inf),
+                        control_gain=data["control_gain"][index],
+                        control_offset=data["control_offset"][index],
+                        active_set=active_set,
+                    )
+                    region.primal_offset = data["primal_offset"][index]
+                    region.primal_gain = data["primal_gain"][index]
+                    region.dual_offset = data["dual_offset"][index]
+                    region.dual_gain = data["dual_gain"][index]
+                    region.sample_theta = data["sample_theta"][index]
+                    regions.append(region)
+                self.regions = regions
+            if self.print_level == "debug":
+                print("Loaded", len(self.regions), self.mode,
+                      "explicit MPC regions from", self.region_cache_path)
+            return True
+        except (OSError, KeyError, ValueError, IndexError):
+            return False
+
+    def save_regions(self):
+        """Save the generated region set atomically for later controller runs."""
+        cache_dir = os.path.dirname(self.region_cache_path)
+        os.makedirs(cache_dir, exist_ok=True)
+        region_count = len(self.regions)
+        active_sets = np.empty(region_count, dtype=object)
+        control_gain = np.empty((region_count, self.theta_dim))
+        control_offset = np.empty(region_count)
+        primal_offset = np.empty((region_count, len(self.constraint_names)))
+        primal_gain = np.empty((region_count, len(self.constraint_names), self.theta_dim))
+        sample_theta = np.empty((region_count, self.theta_dim))
+        max_active = max((len(region.active_set) for region in self.regions), default=0)
+        dual_offset = np.zeros((region_count, max_active))
+        dual_gain = np.zeros((region_count, max_active, self.theta_dim))
+        active_lengths = np.zeros(region_count, dtype=int)
+
+        for index, region in enumerate(self.regions):
+            active_sets[index] = np.asarray(region.active_set, dtype=int)
+            active_lengths[index] = len(region.active_set)
+            control_gain[index] = region.control_gain
+            control_offset[index] = region.control_offset
+            primal_offset[index] = region.primal_offset
+            primal_gain[index] = region.primal_gain
+            sample_theta[index] = region.sample_theta
+            if region.active_set:
+                dual_offset[index, :len(region.active_set)] = region.dual_offset
+                dual_gain[index, :len(region.active_set)] = region.dual_gain
+
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=cache_dir, suffix=".npz", delete=False
+            ) as temporary_file:
+                temporary_path = temporary_file.name
+            np.savez_compressed(
+                temporary_path,
+                region_count=region_count,
+                theta_dim=self.theta_dim,
+                constraint_count=len(self.constraint_names),
+                active_sets=active_sets,
+                active_lengths=active_lengths,
+                control_gain=control_gain,
+                control_offset=control_offset,
+                primal_offset=primal_offset,
+                primal_gain=primal_gain,
+                dual_offset=dual_offset,
+                dual_gain=dual_gain,
+                sample_theta=sample_theta,
+            )
+            os.replace(temporary_path, self.region_cache_path)
+            if self.print_level == "debug":
+                print("Saved", len(self.regions), self.mode,
+                      "explicit MPC regions to", self.region_cache_path)
+        finally:
+            if temporary_path is not None and os.path.exists(temporary_path):
+                os.unlink(temporary_path)
 
     def _build_prediction_model(self):
         dt = self.config.dt
@@ -174,10 +323,11 @@ class _ExplicitMPCBase:
             x_theta, x_u = self._state_maps[stage]
             v_theta = x_theta[1, :]
             v_u = x_u[1, :]
-            for slope, intercept, label in ((0.285, 2.0, "acc_upper_1"),
-                                             (-0.121, 4.83, "acc_upper_2")):
-                add_row(np.r_[-slope * v_u + np.eye(1, n, stage).reshape(-1), np.zeros(self._n_slack)],
-                        intercept, slope * v_theta, label + str(stage))
+            if self.config.include_acceleration_speed_constraints:
+                for slope, intercept, label in ((0.285, 2.0, "acc_upper_1"),
+                                                 (-0.121, 4.83, "acc_upper_2")):
+                    add_row(np.r_[-slope * v_u + np.eye(1, n, stage).reshape(-1), np.zeros(self._n_slack)],
+                            intercept, slope * v_theta, label + str(stage))
             add_row(np.r_[-np.eye(1, n, stage).reshape(-1), np.zeros(self._n_slack)],
                     -self.config.u_min, np.zeros(self.theta_dim), "u_lower" + str(stage))
             add_row(np.r_[np.eye(1, n, stage).reshape(-1), np.zeros(self._n_slack)],
@@ -335,9 +485,13 @@ class _ExplicitMPCBase:
             self.region_hits += 1
             acceleration = selected.evaluate(theta)
         raw_acceleration = float(acceleration)
-        safety_limit = self._cbf_limit(ego_state, pv_state)
-        safety_override = raw_acceleration > safety_limit
-        acceleration = min(raw_acceleration, safety_limit)
+        if self.config.enable_cbf:
+            safety_limit = self._cbf_limit(ego_state, pv_state)
+            safety_override = raw_acceleration > safety_limit
+            acceleration = min(raw_acceleration, safety_limit)
+        else:
+            safety_limit = float("inf")
+            safety_override = False
         acceleration = float(np.clip(acceleration, self.config.u_min, self.config.u_max))
         self.last_diagnostics = {
             "mode": self.mode, "fallback": fallback,
@@ -345,27 +499,83 @@ class _ExplicitMPCBase:
             "raw_acceleration": raw_acceleration,
             "safety_limit": float(safety_limit),
             "safety_override": safety_override,
+            "cbf_enabled": self.config.enable_cbf,
             "region_hits": self.region_hits,
             "fallback_count": self.fallback_count,
         }
         return acceleration
 
 
-class ExplicitMPCUnconnectedController(_ExplicitMPCBase):
-    """Explicit MPC using constant-acceleration PV prediction."""
-    mode = "unconnected"
+class ExplicitMPCUnconnectedController:
+    """Explicit MPC with a constant-acceleration preview.
+
+    The estimated PV trajectory is passed through the same preview-parameter
+    controller used by :class:`ExplicitMPCConnectedController`. This makes the
+    connected/unconnected distinction depend only on the preview source:
+    estimated PV motion versus communicated PV motion.
+    """
+
+    def __init__(self, config=None, generate_regions=True, print_level="info"):
+        # The connected controller owns the single preview-parameterized QP and
+        # its region set. Runtime inputs determine whether the preview is
+        # estimated locally or received from another vehicle.
+        self._preview_controller = ExplicitMPCConnectedController(
+            config=config,
+            generate_regions=generate_regions,
+            print_level=print_level,
+        )
+
+    @property
+    def config(self):
+        return self._preview_controller.config
+
+    @property
+    def regions(self):
+        return self._preview_controller.regions
+
+    @property
+    def fallback_count(self):
+        return self._preview_controller.fallback_count
+
+    @property
+    def region_hits(self):
+        return self._preview_controller.region_hits
+
+    @property
+    def last_diagnostics(self):
+        return self._preview_controller.last_diagnostics
+
+    def _constant_acceleration_preview(self, pv_state):
+        pv_s, pv_v, pv_a = np.asarray(pv_state, dtype=float).reshape(3)
+        preview_s = np.empty(self.config.horizon, dtype=float)
+        predicted_s = pv_s
+        predicted_v = pv_v
+        for stage in range(self.config.horizon):
+            predicted_v = np.clip(
+                predicted_v + self.config.dt * pv_a,
+                self.config.v_min,
+                self.config.v_max,
+            )
+            # Match the project's constant-acceleration preview convention:
+            # each preview position is advanced using the clipped next speed.
+            predicted_s += self.config.dt * predicted_v
+            preview_s[stage] = predicted_s
+        return preview_s
 
     def step(self, ego_state, pv_state, return_diagnostics=False):
-        ego_state = np.asarray(ego_state, dtype=float).reshape(3)
         pv_state = np.asarray(pv_state, dtype=float).reshape(3)
-        # SUMO stores the ego rear-axis position, while Eco-MPC receives the
-        # ego front-bumper position. Keep the raw state for the external CBF
-        # check and use the front-bumper state for the reconstructed QP.
-        qp_ego_state = ego_state.copy()
-        qp_ego_state[0] += self.config.vehicle_length
-        theta = np.r_[qp_ego_state, pv_state]
-        acceleration = self._step(theta, ego_state, pv_state)
-        return (acceleration, self.last_diagnostics.copy()) if return_diagnostics else acceleration
+        preview_s = self._constant_acceleration_preview(pv_state)
+        result = self._preview_controller.step(
+            ego_state=ego_state,
+            pv_state=pv_state,
+            pv_position_preview=preview_s,
+            return_diagnostics=return_diagnostics,
+        )
+        if return_diagnostics:
+            acceleration, diagnostics = result
+            diagnostics["mode"] = "unconnected_constant_acceleration_preview"
+            return acceleration, diagnostics
+        return result
 
 
 class ExplicitMPCConnectedController(_ExplicitMPCBase):

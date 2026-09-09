@@ -76,8 +76,8 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
-        n_pred_steps = 32 # Number of stages the prediction is run for - 50 chosen here for example
-        for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
+        n_pred_steps = 32 # Match the 32-stage generated Eco-MPC interface.
+        for k in range(1, n_pred_steps): # Future indices are predicted PV states -
             # Logic to prevent overspeeding and reversing
             if pv_state[1] > v_max:
                 pv_state[2] = 0.
@@ -107,7 +107,10 @@ class PCC(_vehicle):
         self.api.inputs_p.contents.pos_pred[k] = pv_state[0]
         self.api.inputs_p.contents.time_pred[k] = t_pred
 
-        for k in range(1, n_pred_steps): # Future indices are predicted PV states - 
+        n_pred_steps = min(
+            int(n_pred_steps), len(cycle_vs) + 1, len(cycle_ss) + 1, 32
+        )
+        for k in range(1, n_pred_steps): # Future indices are predicted PV states -
             # Include prediction from external module
             t_pred += dt_pred
 

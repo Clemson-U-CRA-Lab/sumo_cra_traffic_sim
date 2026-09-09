@@ -128,7 +128,7 @@ class sumo_sim():
         self.num_veh = num_vehicle
         self.sumo_veh = [None]*num_vehicle
         for i in range(int(self.num_veh)):
-            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 200 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0, sumo_brake=False)
+            self.sumo_veh[i] = SUMO_vehicles(vehicle_ID="veh" + str(i), init_s= 600 - 12 * i, init_lane=0, route_ID="route1", lane_change_mode=0, sumo_brake=False)
         # for j in range(int(self.num_veh / 2), self.num_veh):
         #     self.sumo_veh[j] = SUMO_vehicles(vehicle_ID="veh" + str(j), init_s= 350 - 12 * (j - int(num_veh/2)), init_lane=1, route_ID="route1", lane_change_mode=0)
     
@@ -165,6 +165,11 @@ if __name__=="__main__":
     parser.add_argument(
         "--disable_preview_cbf",
         help="disable CBF safety control for the PreviewNN controller",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--disable_explicit_cbf",
+        help="disable CBF safety control for Explicit MPC controllers",
         action="store_true",
     )
     parser.add_argument("--preview_vehicle_index", type=int, default=1, help="vehicle index used for preview animation")
@@ -325,18 +330,20 @@ if __name__=="__main__":
         print('Use online MPC to control traffic vehicles')
     elif USING_EXPLICIT_UNCONNECTED:
         explicit_control = ExplicitMPCUnconnectedController(
-            config=ExplicitMPCConfig(dt=0.5, horizon=32, sample_count=400),
+            config=ExplicitMPCConfig(dt=0.5, horizon=20, sample_count=10000,
+                                     enable_cbf=not args.disable_explicit_cbf),
             generate_regions=True,
             print_level=args.print_level)
         controller_name = 'Explicit_Unconnected'
-        print('Use reconstructed 32-stage explicit MPC with unconnected PV prediction')
+        print('Use reconstructed 20-stage explicit MPC with unconnected PV prediction')
     elif USING_EXPLICIT_CONNECTED:
         explicit_control = ExplicitMPCConnectedController(
-            config=ExplicitMPCConfig(dt=0.5, horizon=32, sample_count=400),
+            config=ExplicitMPCConfig(dt=0.5, horizon=20, sample_count=10000,
+                                     enable_cbf=not args.disable_explicit_cbf),
             generate_regions=True,
             print_level=args.print_level)
         controller_name = 'Explicit_Connected'
-        print('Use reconstructed 32-stage explicit MPC with connected PV preview')
+        print('Use reconstructed 20-stage explicit MPC with connected PV preview')
     elif USING_IDM:
         IDM_control = IDM(a=2, b=3, s0=7, v0=20, T=1.5)
         controller_name = 'Intelligent_Driving_Model'
@@ -374,10 +381,14 @@ if __name__=="__main__":
             vehicle_index=args.preview_vehicle_index,
         )
     
-    while sumo_sim_manager.step * 0.1 < record_t[-1] + 20:
+    while sumo_sim_manager.step * 0.1 < 45: #record_t[-1] + 20:
+        # Measure one complete SUMO/control step.  The interval includes the
+        # SUMO advance, state collection, all follower controller evaluations,
+        # control assignment, and per-step statistics.  The deliberate sleep
+        # used to pace the loop is kept outside this measurement.
+        step_start_time = time.perf_counter()
         sumo_sim_manager.simulationStepForward()
         sim_t = sumo_sim_manager.step * 0.1
-        runtime_dt = 0.0
         
         # Initialize power record
         P_t = []
@@ -409,9 +420,6 @@ if __name__=="__main__":
         preview_pv_s_traffic = []
         preview_distance_headway_traffic = []
         preview_speed_gap_traffic = []
-        start_t = time.time()
-        t_start = time.time()
-        
         # MPC running
         for i in range(0, num_veh):
             if i == 0:# or i == int(num_veh/2):
@@ -478,7 +486,6 @@ if __name__=="__main__":
                     front_v_t=front_v_t,
                     mpc_dt=0.5,
                     front_s_init=veh_0_dist_t)
-                t_start = time.time()
                 explicit_acceleration, explicit_diag = explicit_control.step(
                     ego_state=[veh_1_dist_t, veh_1_spd_t, veh_1_acc_t],
                     pv_state=[veh_0_dist_t, veh_0_spd_t, veh_0_acc_t],
@@ -490,7 +497,6 @@ if __name__=="__main__":
                 explicit_diagnostics["region_hits"] += int(not explicit_diag["fallback"])
                 explicit_diagnostics["fallbacks"] += int(explicit_diag["fallback"])
                 explicit_diagnostics["cbf_overrides"] += int(explicit_diag["safety_override"])
-                runtime_dt = time.time() - t_start
                 # Broadcast a compact four-step intent for the next follower.
                 ego_preview_s, ego_preview_v, _ = sumo_sim_manager.sumo_veh[i].predict_constant_acceleration_preview(
                     preview_steps=4, preview_dt=0.1)
@@ -563,7 +569,6 @@ if __name__=="__main__":
             sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc, v_max=30)
 
         if USING_PREVIEW_NEURAL_NETWORK and preview_vehicle_indices:
-            t_start = time.time()
             acc_prediction, trajectory_prediction = Preview_control.step_forward(
                 ego_vt=np.asarray(preview_ego_v_traffic, dtype=float),
                 distance_headway_preview=np.asarray(preview_distance_headway_traffic, dtype=float),
@@ -594,9 +599,7 @@ if __name__=="__main__":
                     acc_prediction[batch_id],
                     v_max=30,
                 )
-            runtime_dt =  time.time() - t_start
         elif USING_TERMINAL_FCN and terminal_vehicle_indices:
-            t_start = time.time()
             acc_prediction, terminal_prediction = Terminal_control.step_forward(
                 ego_vt=np.asarray(terminal_ego_v_traffic, dtype=float),
                 distance_headway_final=np.asarray(terminal_distance_headway_traffic, dtype=float),
@@ -634,46 +637,23 @@ if __name__=="__main__":
                     acc_prediction[batch_id],
                     v_max=30,
                 )
-            runtime_dt = time.time() - t_start
-        else:
-            runtime_dt =  time.time() - t_start
-
-        if args.print_level != "quiet":
-            print('MPC runtime is: ', str(round(runtime_dt * 1000, 3)), 'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
         
         if USING_NEURAL_NETWORK:
-            t_start = time.time()
             acc_traffic_step_t = FCN_control.step_forward(s_vt=np.array(s_vt_traffic), pv_vt=np.array(pv_vt_traffic),
                                                           s_st=np.array(s_st_traffic), pv_st=np.array(pv_st_traffic),
                                                           s_at=np.array(s_at_traffic), pv_at=np.array(pv_at_traffic),
                                                           use_prediction_horizon=True, sim_t=sim_t, lambda_smooth=8.0)
-            runtime_dt =  time.time() - t_start
-            if args.print_level != "quiet":
-                print('NN runtime is: ', str(round(runtime_dt * 1000, 3)), 'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
             sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0], v_max=30)
             for i in range(1, num_veh):
                 sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[i-1], v_max=30)
         if USING_IDM:
-            t_start = time.time()
             acc_traffic_step_t = IDM_control.IDM_acceleration(front_v=np.array([pv_vt_traffic]),
                                                               ego_v=np.array([s_vt_traffic]),
                                                               front_s=np.array([pv_st_traffic]),
                                                               ego_s=np.array([s_st_traffic]))
-            runtime_dt =  time.time() - t_start
-            if args.print_level != "quiet":
-                print('IDM runtime is: ', str(round(runtime_dt * 1000, 4)), 'ms', end='\r')
             sumo_sim_manager.sumo_veh[1].assignTargetAcceleration(acc_traffic_step_t[0][0], v_max=30)
             for i in range(1, num_veh):
                 sumo_sim_manager.sumo_veh[i].assignTargetAcceleration(acc_traffic_step_t[0][i-1], v_max=30)
-        if USING_PREVIEW_NEURAL_NETWORK:
-            runtime_dt =  time.time() - t_start
-            if args.print_level != "quiet":
-                print('Preview NN runtime is: ', str(round(runtime_dt * 1000, 3)), 'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
-        if USING_TERMINAL_FCN:
-            runtime_dt =  time.time() - t_start
-            if args.print_level != "quiet":
-                print('Terminal FCN runtime is: ', str(round(runtime_dt * 1000, 3)), 'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
-
         if args.animate_preview and args.preview_vehicle_index < num_veh:
             selected_vehicle = sumo_sim_manager.sumo_veh[args.preview_vehicle_index]
             preceding_vehicle = sumo_sim_manager.sumo_veh[args.preview_vehicle_index - 1]
@@ -709,8 +689,15 @@ if __name__=="__main__":
         traffic_rho = traffic_density_measurement(lead_s=lead_s, end_s=end_s, num_vehicles=num_veh)
         Avg_density_traffic.append(traffic_rho)
         veh_sim_t.append(sim_t)
-        
+
+        # This is the comparable runtime value for every controller: one
+        # complete simulation/control step, rather than one controller call.
+        runtime_dt = time.perf_counter() - step_start_time
         runtime_record.append(runtime_dt)
+
+        if args.print_level != "quiet":
+            print('Full SUMO step runtime is: ', str(round(runtime_dt * 1000, 3)),
+                  'ms. Distance:', str(round(veh_1_dist_t, 1)), 'm.', end='\r')
         
         if args.logging_sim:
             data_logger(sim_t=sim_t, ego_a=veh_1_acc_t, ego_v=veh_1_spd_t, ego_s=veh_1_dist_t,
