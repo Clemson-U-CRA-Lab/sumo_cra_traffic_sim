@@ -13,7 +13,7 @@ print_level="${5:-debug}"
 cbf_mode="${6:-disabled}"
 
 valid_controller=false
-for candidate in MPC ExplicitConnected NN PreviewNN TerminalFCN IDM; do
+for candidate in MPC ExplicitConnected NN PreviewNN IDM; do
     if [[ "$controller" == "$candidate" ]]; then
         valid_controller=true
         break
@@ -22,7 +22,7 @@ done
 
 if [[ "$valid_controller" != true ]]; then
     echo "Unsupported controller: $controller"
-    echo "Usage: ./runtime_analysis.sh [MPC|ExplicitConnected|NN|PreviewNN|TerminalFCN|IDM] [Hwy|Nyc|Ftp|US06|FTPsec1|FTPsec2|FTPsec3] [max_vehicle_count] [vehicle_step] [quiet|info|debug] [enabled|disabled]"
+    echo "Usage: ./runtime_analysis.sh [MPC|ExplicitConnected|NN|PreviewNN|IDM] [Hwy|Nyc|Ftp|US06|FTPsec1|FTPsec2|FTPsec3] [max_vehicle_count] [vehicle_step] [quiet|info|debug] [enabled|disabled]"
     exit 1
 fi
 
@@ -58,6 +58,7 @@ for ((veh_num=vehicle_step; veh_num<=max_vehicle_count; veh_num+=vehicle_step));
     echo "Running controller=$controller profile=$leading_vehicle_profile num_sv=$veh_num"
     python3 scripts/run_sim.py \
         "${explicit_cbf_args[@]}" \
+        --logging_sim \
         --num_sv "$veh_num" \
         --print_level "$print_level" \
         "$leading_vehicle_profile" \

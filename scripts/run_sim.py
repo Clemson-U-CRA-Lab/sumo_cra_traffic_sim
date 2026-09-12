@@ -40,23 +40,6 @@ def preview_trajectory_to_vehicle_preview(
     return ego_preview_s, ego_preview_v
 
 
-def terminal_prediction_to_vehicle_preview(
-    terminal_prediction,
-    preview_steps=PREVIEW_STEPS,
-):
-    terminal_prediction = np.asarray(terminal_prediction, dtype=float).reshape(-1)
-    if terminal_prediction.size != 2:
-        raise ValueError(
-            "Unexpected terminal prediction size: expected 2, got "
-            + str(terminal_prediction.size)
-        )
-
-    preview_progress = np.linspace(1.0 / preview_steps, 1.0, preview_steps)
-    ego_preview_s = terminal_prediction[0] * preview_progress
-    ego_preview_v = terminal_prediction[1] * preview_progress
-    return ego_preview_s, ego_preview_v
-
-
 def initialize_preview_animation(preview_steps, vehicle_index):
     plt.ion()
     figure, axes = plt.subplots(2, 1, num="Preview State Animation", figsize=(8, 6))
@@ -175,7 +158,7 @@ if __name__=="__main__":
     parser.add_argument("--preview_vehicle_index", type=int, default=1, help="vehicle index used for preview animation")
     parser.add_argument("--num_sv", type=int, default=2.0, help="Number of vehicles in the traffic")
     parser.add_argument('leading_speed_profile', choices=['Nyc', 'Hwy', 'Ftp', 'US06','FTPsec1','FTPsec2','FTPsec3'], help='Choose leading vehicles speed profile')
-    parser.add_argument("control_type", choices=['MPC', 'ExplicitUnconnected', 'ExplicitConnected', 'NN', 'PreviewNN', 'TerminalFCN', 'IDM'], help='Choose control method for traffic vehicles')
+    parser.add_argument("control_type", choices=['MPC', 'ExplicitUnconnected', 'ExplicitConnected', 'NN', 'PreviewNN', 'IDM'], help='Choose control method for traffic vehicles')
     args = parser.parse_args()
     
     # Traffic control setting
@@ -191,14 +174,12 @@ if __name__=="__main__":
         USING_NEURAL_NETWORK = 0
         USING_PREVIEW_NEURAL_NETWORK = 0
         USING_IDM = 0
-        USING_TERMINAL_FCN = 0
         USING_EXPLICIT_UNCONNECTED = 1
     elif args.control_type == 'ExplicitConnected':
         USING_ONLINE_MPC = 0
         USING_NEURAL_NETWORK = 0
         USING_PREVIEW_NEURAL_NETWORK = 0
         USING_IDM = 0
-        USING_TERMINAL_FCN = 0
         USING_EXPLICIT_CONNECTED = 1
     elif args.control_type == 'NN':
         USING_ONLINE_MPC = 0 # If using online MPC to track front vehicle
@@ -210,22 +191,11 @@ if __name__=="__main__":
         USING_NEURAL_NETWORK = 0 # If using neural network controller to track front vehicle
         USING_PREVIEW_NEURAL_NETWORK = 1
         USING_IDM = 0 # If using IDM to traffic front vehicle
-        USING_TERMINAL_FCN = 0
-    elif args.control_type == 'TerminalFCN':
-        USING_ONLINE_MPC = 0
-        USING_NEURAL_NETWORK = 0
-        USING_PREVIEW_NEURAL_NETWORK = 0
-        USING_IDM = 0
-        USING_TERMINAL_FCN = 1
     else:
         USING_ONLINE_MPC = 0 # If using online MPC to track front vehicle
         USING_NEURAL_NETWORK = 0 # If using neural network controller to track front vehicle
         USING_PREVIEW_NEURAL_NETWORK = 0
         USING_IDM = 1 # If using IDM to traffic front vehicle
-        USING_TERMINAL_FCN = 0
-
-    if args.control_type != 'TerminalFCN':
-        USING_TERMINAL_FCN = 0
         
     num_veh = args.num_sv
     
@@ -269,23 +239,8 @@ if __name__=="__main__":
     # Initialize controller
     dirname = os.path.dirname(__file__)
     nn_pt_filename = dirname + '/traffic_following_control_dc_trained.pt'
-    preview_nn_pt_filename = os.path.abspath(
-        os.path.join(
-            parent_dir,
-            os.pardir,
-            "offline_eco_car_following_control",
-            "Preview_car_following_experiment",
-            "preview_traffic_following_control_conv_best.pt",
-        )
-    )
-    terminal_fcn_pt_filename = os.path.abspath(
-        os.path.join(
-            parent_dir,
-            os.pardir,
-            "offline_eco_car_following_control",
-            "Preview_car_following_experiment",
-            "terminal_preview_fcn_best.pt",
-        )
+    preview_nn_pt_filename = os.path.join(
+        dirname, 'preview_traffic_following_control_conv_best.pt'
     )
     
     # Setup controller
@@ -311,19 +266,6 @@ if __name__=="__main__":
         )
         controller_name = 'Preview_Neural_Network'
         print('Use preview neural network to control traffic vehicles')
-    elif USING_TERMINAL_FCN:
-        if not os.path.exists(terminal_fcn_pt_filename):
-            raise FileNotFoundError(
-                "Missing terminal FCN checkpoint: " + terminal_fcn_pt_filename
-            )
-        Terminal_control = TerminalPreviewFCN_controller(
-            nn_pt_file=terminal_fcn_pt_filename,
-            safe_distance_headway=PREVIEW_SAFE_DISTANCE_HEADWAY,
-            enable_cbf_safety=not args.disable_preview_cbf,
-            print_level=args.print_level,
-        )
-        controller_name = 'Terminal_Preview_FCN'
-        print('Use terminal preview FCN to control traffic vehicles')
     elif USING_ONLINE_MPC:
         online_MPC_control = PCC_MPC_controller(dirname=dirname)
         controller_name = 'Online_MPC'
@@ -360,7 +302,6 @@ if __name__=="__main__":
         traci.gui.setZoom("View #0", 1000)
     
     Avg_spd_traffic = []
-    Avg_density_traffic = []
     ego_v = []
     pv_v = []
     explicit_diagnostics = {
@@ -370,7 +311,6 @@ if __name__=="__main__":
         "cbf_overrides": 0,
     }
     lead_s = 50.0
-    end_s = 0.0
     preview_animation = None
 
     if args.animate_preview:
@@ -381,7 +321,7 @@ if __name__=="__main__":
             vehicle_index=args.preview_vehicle_index,
         )
     
-    while sumo_sim_manager.step * 0.1 < 45: #record_t[-1] + 20:
+    while sumo_sim_manager.step * 0.1 < record_t[-1] + 20:
         # Measure one complete SUMO/control step.  The interval includes the
         # SUMO advance, state collection, all follower controller evaluations,
         # control assignment, and per-step statistics.  The deliberate sleep
@@ -402,16 +342,6 @@ if __name__=="__main__":
         
         s_at_traffic = []
         pv_at_traffic = []
-        terminal_predicted_s = {}
-        terminal_predicted_v = {}
-        terminal_vehicle_indices = []
-        terminal_ego_v_traffic = []
-        terminal_ego_a_traffic = []
-        terminal_ego_s_traffic = []
-        terminal_pv_v_traffic = []
-        terminal_pv_s_traffic = []
-        terminal_distance_headway_traffic = []
-        terminal_speed_gap_traffic = []
         preview_vehicle_indices = []
         preview_ego_v_traffic = []
         preview_ego_a_traffic = []
@@ -445,15 +375,10 @@ if __name__=="__main__":
                     preview_dt=PREVIEW_DT,
                     source="driving_cycle",
                 )
-                terminal_predicted_s[i] = lead_prev_s[PREVIEW_STEPS - 1]
-                terminal_predicted_v[i] = lead_prev_v[PREVIEW_STEPS - 1]
                 continue
             
             [veh_0_acc_t, veh_0_spd_t, veh_0_dist_t] = sumo_sim_manager.sumo_veh[i-1].getVehicleStates()
             [veh_1_acc_t, veh_1_spd_t, veh_1_dist_t] = sumo_sim_manager.sumo_veh[i].getVehicleStates()
-            
-            if i == num_veh - 1:
-                end_s = veh_1_dist_t
             
             # Compute vehicle power at time sim_t
             P_t.append(engine_power_estimation(ego_v=veh_1_spd_t, ego_a=veh_1_acc_t))
@@ -530,36 +455,6 @@ if __name__=="__main__":
                 preview_distance_headway_traffic.append(distance_headway_preview)
                 preview_speed_gap_traffic.append(speed_gap_preview)
                 continue
-            elif USING_TERMINAL_FCN:
-                if (i - 1) in terminal_predicted_s and (i - 1) in terminal_predicted_v:
-                    terminal_distance_headway = (
-                        terminal_predicted_s[i - 1] - veh_1_dist_t
-                    )
-                    terminal_speed_gap = (
-                        terminal_predicted_v[i - 1] - veh_1_spd_t
-                    )
-                else:
-                    distance_headway_preview, speed_gap_preview = (
-                        sumo_sim_manager.sumo_veh[i].build_preview_features_from_preceding_vehicle(
-                            preceding_vehicle=sumo_sim_manager.sumo_veh[i-1],
-                            preview_steps=PREVIEW_STEPS,
-                            preview_dt=PREVIEW_DT,
-                            sim_step=sumo_sim_manager.step,
-                            use_current_ego_state=True,
-                        )
-                    )
-                    terminal_distance_headway = distance_headway_preview[-1]
-                    terminal_speed_gap = speed_gap_preview[-1]
-
-                terminal_vehicle_indices.append(i)
-                terminal_ego_v_traffic.append(veh_1_spd_t)
-                terminal_ego_a_traffic.append(veh_1_acc_t)
-                terminal_ego_s_traffic.append(veh_1_dist_t)
-                terminal_pv_v_traffic.append(veh_0_spd_t)
-                terminal_pv_s_traffic.append(veh_0_dist_t)
-                terminal_distance_headway_traffic.append(terminal_distance_headway)
-                terminal_speed_gap_traffic.append(terminal_speed_gap)
-                continue
             else:
                 acc_traffic_step_t = np.zeros(3)
                 
@@ -599,45 +494,6 @@ if __name__=="__main__":
                     acc_prediction[batch_id],
                     v_max=30,
                 )
-        elif USING_TERMINAL_FCN and terminal_vehicle_indices:
-            acc_prediction, terminal_prediction = Terminal_control.step_forward(
-                ego_vt=np.asarray(terminal_ego_v_traffic, dtype=float),
-                distance_headway_final=np.asarray(terminal_distance_headway_traffic, dtype=float),
-                speed_gap_final=np.asarray(terminal_speed_gap_traffic, dtype=float),
-                pv_vt=np.asarray(terminal_pv_v_traffic, dtype=float),
-                pv_st=np.asarray(terminal_pv_s_traffic, dtype=float),
-                s_st=np.asarray(terminal_ego_s_traffic, dtype=float),
-                sim_t=sim_t,
-                lambda_smooth=0.0,
-                s_at=np.asarray(terminal_ego_a_traffic, dtype=float),
-                use_cbf_safety=not args.disable_preview_cbf,
-                return_terminal=True,
-            )
-
-            for batch_id, vehicle_index in enumerate(terminal_vehicle_indices):
-                terminal_predicted_s[vehicle_index] = (
-                    terminal_ego_s_traffic[batch_id] + terminal_prediction[batch_id][0]
-                )
-                terminal_predicted_v[vehicle_index] = (
-                    terminal_ego_v_traffic[batch_id] + terminal_prediction[batch_id][1]
-                )
-                ego_preview_s, ego_preview_v = terminal_prediction_to_vehicle_preview(
-                    terminal_prediction=terminal_prediction[batch_id],
-                    preview_steps=PREVIEW_STEPS,
-                )
-                sumo_sim_manager.sumo_veh[vehicle_index].update_vehicle_future_states_preview(
-                    ego_preview_s,
-                    ego_preview_v,
-                    sim_step=sumo_sim_manager.step,
-                    preview_dt=PREVIEW_DT,
-                    source="terminal_fcn",
-                    is_relative=True,
-                )
-                sumo_sim_manager.sumo_veh[vehicle_index].assignTargetAcceleration(
-                    acc_prediction[batch_id],
-                    v_max=30,
-                )
-        
         if USING_NEURAL_NETWORK:
             acc_traffic_step_t = FCN_control.step_forward(s_vt=np.array(s_vt_traffic), pv_vt=np.array(pv_vt_traffic),
                                                           s_st=np.array(s_st_traffic), pv_st=np.array(pv_st_traffic),
@@ -685,9 +541,6 @@ if __name__=="__main__":
         avg_spd_t = np.mean(np.array(Spd_t))
         Avg_spd_traffic.append(avg_spd_t)
         
-        # Add traffic density
-        traffic_rho = traffic_density_measurement(lead_s=lead_s, end_s=end_s, num_vehicles=num_veh)
-        Avg_density_traffic.append(traffic_rho)
         veh_sim_t.append(sim_t)
 
         # This is the comparable runtime value for every controller: one
@@ -735,35 +588,24 @@ if __name__=="__main__":
             str(explicit_diagnostics["cbf_overrides"]),
         )
     
-    # Record runtime
-    filename =  "Runtime_" + controller_name + ".csv"
-    with open(filename, "a") as f:
-        writer = csv.writer(f)
-        writer.writerow([str(num_veh),
-                         str(round(np.mean(runtime_record) * 1000, 4)),
-                         str(round(np.min(runtime_record) * 1000, 4)), 
-                         str(round(np.max(runtime_record) * 1000, 4)), 
-                         str(round(np.std(runtime_record) * 1000, 4))])
+    # Persist runtime data only when simulation logging is explicitly enabled.
+    if args.logging_sim:
+        filename = "Runtime_" + controller_name + ".csv"
+        with open(filename, "a") as f:
+            writer = csv.writer(f)
+            writer.writerow([str(num_veh),
+                             str(round(np.mean(runtime_record) * 1000, 4)),
+                             str(round(np.min(runtime_record) * 1000, 4)),
+                             str(round(np.max(runtime_record) * 1000, 4)),
+                             str(round(np.std(runtime_record) * 1000, 4))])
     
     if args.plot_result:
         plt.figure(1)
-        plt.subplot(2,1,1)
         plt.plot(veh_sim_t, Avg_spd_traffic, '-b')
         plt.xlabel('Time [s]', fontsize=20)
         plt.ylabel('Average speed [m/s]', fontsize=20)
 
-        plt.subplot(2,1,2)
-        plt.plot(veh_sim_t, Avg_density_traffic, '-b')
-        plt.xlabel('Time [s]', fontsize=20)
-        plt.ylabel('Traffic density [veh/km]', fontsize=20)
-
         plt.figure(2)
-        plt.hist(Avg_density_traffic, bins=40, color='skyblue', density=True)
-        plt.xlabel('Average density [veh/km]', fontsize=20)
-        plt.ylabel('Percentage', fontsize=20)
-        plt.xlim([0, 150])
-
-        plt.figure(3)
         plt.plot(veh_sim_t, ego_v, '-k')
         plt.plot(veh_sim_t, pv_v, '-b')
         plt.legend(['Ego vehicle', 'Preceding vehicle'])

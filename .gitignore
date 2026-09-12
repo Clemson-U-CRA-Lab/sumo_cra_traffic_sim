@@ -1,1 +1,6 @@
 scripts/.explicit_mpc_cache/
+__pycache__/
+*.py[cod]
+*.aux
+*.log
+*.out
